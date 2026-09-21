@@ -1,0 +1,27 @@
+# Roblox Studio local/generated files
+*.rbxl
+*.rbxlx
+*.rbxl.lock
+*.rbxlx.lock
+sourcemap.json
+
+# Secrets and local environment files
+.env
+.env.*
+!.env.example
+
+# Editor and IDE state
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+
+# OS metadata
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Generated dependencies/build output
+node_modules/
+out/
+dist/
