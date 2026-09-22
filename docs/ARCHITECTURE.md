@@ -24,9 +24,9 @@ Project Racer separates game code into three primary areas:
 
 | Area   | Studio Location                             | Repository Location |
 | ------ | ------------------------------------------- | ------------------- |
-| Client | `StarterPlayer/StarterPlayerScripts/Client` | `src/client`        |
-| Server | `ServerScriptService/Server`                | `src/server`        |
-| Shared | `ReplicatedStorage/Shared`                  | `src/shared`        |
+| Client | `StarterPlayer/StarterPlayerScripts/client` | `src/client`        |
+| Server | `ServerScriptService/server`                | `src/server`        |
+| Shared | `ReplicatedStorage/shared`                  | `src/shared`        |
 
 Only `Script`, `LocalScript`, `ModuleScript`, and `Folder` instances should exist inside these synchronized roots.
 
