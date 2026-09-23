@@ -21,4 +21,6 @@ end
 local vehicle = VehicleService.spawnOnGround(marker.CFrame)
 if vehicle then
 	print("PlaceholderVehicle spawned. Green = front. Jump onto DriverSeat to sit; driving comes later.")
+	local VehicleChecks = require(script.Parent:WaitForChild("VehicleChecks"))
+	VehicleChecks.run(vehicle, marker.CFrame)
 end

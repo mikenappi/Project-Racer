@@ -11,7 +11,7 @@ and automatic respawn are later work. The wheels are welded visual placeholders.
    Keep the existing lowercase roots: `ServerScriptService/server` maps to
    `src/server`, and `ReplicatedStorage/shared` maps to `src/shared`.
 3. Open `tools/SetupPlaceholderVehicle.luau` in your editor, copy the entire
-   file, paste it into Studio's **Command Bar**, and press Enter.
+   file, paste it into Studio's **Command Bar**, and press **Ctrl + Enter**.
    This is an edit-mode setup command, not a synced game script.
 4. Save the Development place. The command creates the template in
    `ServerStorage/VehicleTemplates/PlaceholderVehicle`, an invisible marker at
@@ -79,11 +79,26 @@ own ownership policy. No client input, RemoteEvents, or race logic is added here
 
 ## Acceptance checks in Studio
 
-These checks must pass before Issue 7 is closed. They have not been run remotely.
+The initial play-test spawn was confirmed in Studio's log on September 23, 2026.
+The remaining acceptance checks are not yet confirmed.
+
+With Script Sync connected, stop and restart Play after updating the branch.
+`VehicleChecks` now runs automatically in the Studio test, taking about eight
+seconds. It verifies the visible model's connected assembly, seat/marker direction,
+and settled floor contact at the center and four corners. It then spawns three
+independent copies at 0, 90, and 180 degrees on a temporary isolated floor above
+the map, checks their orientation and physics, and removes those copies and floor.
+The original visible vehicle stays in place. The saved template must stay intact.
+
+Output prints `[Issue 7] ALL AUTOMATED CHECKS PASSED` only if all those checks
+succeed. Otherwise it reports the failing assertion. The visible model also gets
+an `AcceptanceCheckStatus` attribute: `Running`, `Passed`, or `Failed`.
+These checks validate structure and physics; visually inspect the vehicle and
+test actual seating as well. Do not mark the issue complete based on syntax alone.
 
 | Check | Expected result |
 | --- | --- |
-| Start Play | Exactly one vehicle appears under `Workspace/Vehicles`; no errors |
+| Start Play and wait for automatic checks | One vehicle remains under `Workspace/Vehicles`; all automated checks pass |
 | Wait 10 seconds on a flat floor | Vehicle rests on the floor without falling through or separating |
 | Jump onto DriverSeat, then jump off | Avatar attaches facing the green front, then detaches |
 | Stop, rotate marker 90 degrees around Y, Play again | Green nose follows the new marker heading |
