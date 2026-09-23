@@ -20,6 +20,7 @@ end
 
 local vehicle = VehicleService.spawnOnGround(marker.CFrame)
 if vehicle then
+	print(string.format("[Issue 7] Test settings: %.1f-stud wheels; target speed %.0f studs/second.", VehicleConfig.TestWheelDiameter, VehicleConfig.TestDriveSpeed))
 	print("PlaceholderVehicle spawned. Checking physics before enabling the seated motion test...")
 	local VehicleChecks = require(script.Parent:WaitForChild("VehicleChecks"))
 	local passed = VehicleChecks.run(vehicle, marker.CFrame)

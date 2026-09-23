@@ -8,6 +8,12 @@ the ground during this test rather than rotating on axles.
 
 ## One-time Studio setup
 
+If the vehicle already exists, this speed/wheel update needs only Script Sync and
+a new Play session. The Studio test applies 2.8-stud wheels to each spawned copy,
+even when the saved template still has the original small wheels. No Command Bar
+paste is required for testing. Output reports the wheel diameter and target speed.
+The saved edit-mode template changes only if you deliberately rerun setup below.
+
 1. Check out `feat/placeholder-vehicle` locally and open the Development place.
 2. Stop any play test. Start the existing native Script Sync connections.
    Keep the existing lowercase roots: `ServerScriptService/server` maps to
@@ -53,7 +59,8 @@ The model pivot is the chassis center. `vehicle:GetPivot().LookVector` is forwar
 The DriverAttachment is a reference point; VehicleSeat supplies the actual
 character weld. The stored chassis is anchored, while spawned copies are unanchored.
 The chassis underside is at local Y = -0.7; wheel bottoms are at Y = -1.4.
-This gives 0.7 studs of body clearance on flat ground. Wheel friction is kept low
+This gives 0.7 studs of body clearance on flat ground. These dimensions apply to
+the upgraded template and the automatic Studio-test overrides. Wheel friction is kept low
 for the temporary sliding test. `VehicleService.getGroundSupport` measures the
 lowest colliders for spawn height, ground detection, and acceptance checks.
 
@@ -73,7 +80,10 @@ local groundedVehicle = VehicleService.spawnOnGround(marker.CFrame)
 ```
 
 Spawns clone the saved template into `Workspace/Vehicles`; they never move the
-template out of ServerStorage. `spawnOnGround` excludes active vehicles from its
+template out of ServerStorage. In Studio with `EnablePlaceholderVehicleTest = true`,
+each copy receives the configured test wheel dimensions and collision before its
+spawn height is measured. Outside that test, the saved model's geometry is used.
+`spawnOnGround` excludes active vehicles from its
 ground ray and checks each collidable part's volume for obstacles before spawning.
 It assumes flat terrain beneath the vehicle, so inspect edges and overhangs
 visually. Use separate clear positions when spawning multiple vehicles.
@@ -88,7 +98,7 @@ own ownership policy. No client input, RemoteEvents, or race logic is added here
 
 After the automatic checks pass (about eight seconds after Play), Output prints
 `Forward-motion test ready`. Sit in DriverSeat to move toward the green nose at a
-target of 12 studs/second. Jump out to apply the brake. An anchored collidable wall
+target of 48 studs/second. Jump out to apply the brake. An anchored collidable wall
 should block the car; movable objects may be pushed. There is no steering yet.
 Stop/Play resets the vehicle to its marker.
 
@@ -103,6 +113,8 @@ it is not attached to the saved template or the temporary acceptance-test copies
 Tune `TestDriveSpeed` and `TestDriveAcceleration` in `VehicleConfig`, or set
 `TestDriveEnabled = false` to return to the stationary fixture. Restart Play
 after changing configuration. No setup-command rerun is needed for this feature.
+`TestWheelDiameter` and `TestWheelWidth` control the wheel overrides on Studio
+test copies. Turning off the Workspace test attribute disables the entire fixture.
 
 The current wheels are 2.8 studs in diameter and provide rounded ground collision.
 They remain welded, so this is not rolling-wheel traction or suspension. Inspect
@@ -115,11 +127,11 @@ to be confirmed in Studio.
 
 The initial play-test spawn and all original stationary acceptance checks were
 confirmed in Studio's log on September 23, 2026 (including the 20:56 UTC run).
-Rerun the checks after upgrading the wheels; that geometry is not yet verified.
+Rerun the checks after syncing the wheel override; that geometry is not yet verified.
 
 With Script Sync connected, stop and restart Play after updating the branch.
 `VehicleChecks` now runs automatically in the Studio test, taking about eight
-seconds. It verifies the visible model's connected assembly, seat/marker direction,
+seconds. It verifies the configured wheel dimensions and collision, connected assembly, seat/marker direction,
 and settled floor contact beneath each supporting collider. It then spawns three
 independent copies at 0, 90, and 180 degrees on a temporary isolated floor above
 the map, checks their orientation and physics, and removes those copies and floor.

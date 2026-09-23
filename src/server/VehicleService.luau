@@ -3,6 +3,7 @@
 local ServerStorage = game:GetService("ServerStorage")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
 
 local VehicleConfig = require(ReplicatedStorage:WaitForChild("shared"):WaitForChild("VehicleConfig"))
 local VehicleService = {}
@@ -60,11 +61,37 @@ local function getActiveFolder(): Folder
 	return folder
 end
 
--- spawnCFrame is the chassis center; its LookVector is the vehicle's forward direction.
-function VehicleService.spawn(spawnCFrame: CFrame): Model
-	local template = getTemplate()
+local function createVehicle(): Model
+	local vehicle = getTemplate():Clone()
+	-- This opt-in Studio fixture overrides only its clones. The saved Studio
+	-- template remains editable and production spawns keep its authored geometry.
+	if RunService:IsStudio() and Workspace:GetAttribute("EnablePlaceholderVehicleTest") == true then
+		local chassis = vehicle.PrimaryPart
+		assert(chassis)
+		for _, side in {-1, 1} do
+			for _, axle in {-1, 1} do
+				local name = (if axle == -1 then "Front" else "Rear") .. (if side == -1 then "Left" else "Right") .. "Wheel"
+				local wheel = vehicle:FindFirstChild(name)
+				assert(wheel and wheel:IsA("Part"), "Missing wheel: " .. name)
+				local weld = wheel:FindFirstChild(name .. "Weld")
+				assert(weld and weld:IsA("WeldConstraint"), "Missing wheel weld: " .. name)
+				weld.Enabled = false
+				wheel.Shape = Enum.PartType.Cylinder
+				wheel.Size = Vector3.new(VehicleConfig.TestWheelWidth, VehicleConfig.TestWheelDiameter, VehicleConfig.TestWheelDiameter)
+				local sideOffset = chassis.Size.X / 2 + VehicleConfig.TestWheelWidth / 2 - 0.2
+				wheel.CFrame = chassis.CFrame * CFrame.new(side * sideOffset, 0, axle * 3)
+				wheel.CanCollide = true
+				wheel.CustomPhysicalProperties = PhysicalProperties.new(1, 0.1, 0, 100, 100)
+				weld.Enabled = true
+			end
+		end
+		vehicle:SetAttribute("WheelGeometryVersion", 2)
+	end
+	return vehicle
+end
+
+local function placeVehicle(vehicle: Model, spawnCFrame: CFrame): Model
 	local folder = getActiveFolder()
-	local vehicle = template:Clone()
 	vehicle:PivotTo(spawnCFrame)
 	for _, descendant in vehicle:GetDescendants() do
 		if descendant:IsA("BasePart") then
@@ -81,12 +108,14 @@ function VehicleService.spawn(spawnCFrame: CFrame): Model
 	return vehicle
 end
 
+-- spawnCFrame is the chassis center; its LookVector is the vehicle's forward direction.
+function VehicleService.spawn(spawnCFrame: CFrame): Model
+	return placeVehicle(createVehicle(), spawnCFrame)
+end
+
 -- The marker must be above a clear, flat surface and rotated only around world Y.
 function VehicleService.spawnOnGround(markerCFrame: CFrame): Model?
 	assert(markerCFrame.UpVector:Dot(Vector3.yAxis) > 0.999, "Vehicle spawn markers must be upright.")
-	local template = getTemplate()
-	local chassis = template.PrimaryPart
-	assert(chassis)
 	local params = RaycastParams.new()
 	params.RespectCanCollide = true
 	params.FilterDescendantsInstances = {getActiveFolder()}
@@ -101,21 +130,25 @@ function VehicleService.spawnOnGround(markerCFrame: CFrame): Model?
 		return nil
 	end
 
-	local groundOffset = VehicleService.getGroundSupport(template)
+	-- Measure and spawn the same prepared copy so wheel overrides cannot clip
+	-- into the floor or evade the occupied-space check.
+	local vehicle = createVehicle()
+	local groundOffset = VehicleService.getGroundSupport(vehicle)
 	local position = ground.Position + Vector3.new(0, groundOffset + VehicleConfig.GroundClearance, 0)
 	local spawnCFrame = CFrame.new(position) * markerCFrame.Rotation
 	local overlapParams = OverlapParams.new()
 	overlapParams.RespectCanCollide = true
-	for _, part in template:GetDescendants() do
+	for _, part in vehicle:GetDescendants() do
 		if part:IsA("BasePart") and part.CanCollide then
-			local partCFrame = spawnCFrame * template:GetPivot():ToObjectSpace(part.CFrame)
+			local partCFrame = spawnCFrame * vehicle:GetPivot():ToObjectSpace(part.CFrame)
 			if #Workspace:GetPartBoundsInBox(partCFrame, part.Size, overlapParams) > 0 then
+				vehicle:Destroy()
 				warn("PlaceholderVehicle spawn is occupied. Move the marker or remove the previous vehicle.")
 				return nil
 			end
 		end
 	end
-	return VehicleService.spawn(spawnCFrame)
+	return placeVehicle(vehicle, spawnCFrame)
 end
 
 return VehicleService

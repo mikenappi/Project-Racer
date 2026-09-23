@@ -26,6 +26,14 @@ local function checkAssembly(vehicle: Model, expectedForward: Vector3)
 	assert(front and front:IsA("BasePart") and rear and rear:IsA("BasePart"), "Front/rear markers are missing.")
 	assert(chassis.CFrame:PointToObjectSpace(front.Position).Z < 0, "Front marker must be at local -Z.")
 	assert(chassis.CFrame:PointToObjectSpace(rear.Position).Z > 0, "Rear marker must be at local +Z.")
+	for _, name in {"FrontLeftWheel", "FrontRightWheel", "RearLeftWheel", "RearRightWheel"} do
+		local wheel = vehicle:FindFirstChild(name)
+		assert(wheel and wheel:IsA("Part") and wheel.CanCollide, name .. " is missing wheel collision.")
+		assert(math.abs(wheel.Size.Y - VehicleConfig.TestWheelDiameter) < 0.01
+			and math.abs(wheel.Size.Z - VehicleConfig.TestWheelDiameter) < 0.01
+			and math.abs(wheel.Size.X - VehicleConfig.TestWheelWidth) < 0.01,
+			name .. " has stale wheel dimensions.")
+	end
 	for _, part in vehicle:GetDescendants() do
 		if part:IsA("BasePart") then
 			assert(not part.Anchored, part.Name .. " is anchored.")
