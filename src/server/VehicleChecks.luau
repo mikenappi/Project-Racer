@@ -44,11 +44,13 @@ local function checkGround(vehicle: Model)
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = {vehicle}
 	params.RespectCanCollide = true
-	-- Probe each corner as well as the center; one ray can miss an unsupported edge.
-	for _, offset in {Vector3.zero, Vector3.new(-0.45, 0, -0.45), Vector3.new(-0.45, 0, 0.45), Vector3.new(0.45, 0, -0.45), Vector3.new(0.45, 0, 0.45)} do
-		local bottom = chassis.CFrame:PointToWorldSpace(Vector3.new(offset.X * chassis.Size.X, -chassis.Size.Y / 2, offset.Z * chassis.Size.Z))
+	local groundOffset, supports = VehicleService.getGroundSupport(vehicle)
+	-- Check the actual support geometry, not the raised chassis underside.
+	for _, support in supports do
+		local offset = chassis.CFrame:PointToObjectSpace(support.Position)
+		local bottom = chassis.CFrame:PointToWorldSpace(Vector3.new(offset.X, -groundOffset, offset.Z))
 		local hit = Workspace:Raycast(bottom + Vector3.new(0, 0.5, 0), Vector3.new(0, -1, 0), params)
-		assert(hit and math.abs(hit.Position.Y - bottom.Y) < GROUND_TOLERANCE, "Chassis is floating, intersecting the floor, or missing ground support.")
+		assert(hit and math.abs(hit.Position.Y - bottom.Y) < GROUND_TOLERANCE, support.Name .. " is floating, intersecting the floor, or missing ground support.")
 	end
 end
 

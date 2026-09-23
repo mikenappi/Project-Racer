@@ -5,6 +5,7 @@ local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local VehicleConfig = require(ReplicatedStorage:WaitForChild("shared"):WaitForChild("VehicleConfig"))
+local VehicleService = require(script.Parent:WaitForChild("VehicleService"))
 
 local VehicleTestDrive = {}
 
@@ -14,6 +15,7 @@ function VehicleTestDrive.start(vehicle: Model): () -> ()
 	local seat = vehicle:FindFirstChild("DriverSeat")
 	assert(chassis and seat and seat:IsA("VehicleSeat"), "Vehicle needs a chassis and driver seat.")
 	assert(not chassis:FindFirstChild("TestForwardVelocity"), "Test driving is already attached.")
+	local groundOffset, supports = VehicleService.getGroundSupport(vehicle)
 
 	local attachment = Instance.new("Attachment")
 	attachment.Name = "TestDriveAttachment"
@@ -61,9 +63,17 @@ function VehicleTestDrive.start(vehicle: Model): () -> ()
 			and Players:GetPlayerFromCharacter(character) ~= nil
 		local forward = chassis.CFrame.LookVector
 		local horizontalForward = Vector3.new(forward.X, 0, forward.Z)
-		local ground = Workspace:Raycast(chassis.Position, Vector3.new(0, -(chassis.Size.Y / 2 + 0.5), 0), params)
+		local grounded = false
+		for _, support in supports do
+			local offset = chassis.CFrame:PointToObjectSpace(support.Position)
+			local origin = chassis.CFrame:PointToWorldSpace(Vector3.new(offset.X, 0, offset.Z))
+			local hit = Workspace:Raycast(origin, Vector3.new(0, -(groundOffset + 0.5), 0), params)
+			if hit and hit.Normal.Y > 0.5 then
+				grounded = true
+				break
+			end
+		end
 		local upright = chassis.CFrame.UpVector:Dot(Vector3.yAxis) > 0.5
-		local grounded = ground ~= nil and ground.Normal.Y > 0.5
 		local driving = hasDriver and grounded and upright and horizontalForward.Magnitude > 0.01
 		vehicle:SetAttribute("TestDriveActive", driving)
 

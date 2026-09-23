@@ -72,13 +72,37 @@ if not vehicle then
 			local wheel = Instance.new("Part")
 			wheel.Shape = Enum.PartType.Cylinder
 			local name = (if axle == -1 then "Front" else "Rear") .. (if side == -1 then "Left" else "Right") .. "Wheel"
-			-- Cylinders run along local X. Their bottoms align with the collision chassis.
+			-- Cylinders run along local X; the wheel upgrade below sets final dimensions.
 			attach(wheel, name, Vector3.new(0.8, 1.4, 1.4), CFrame.new(side * 3.2, 0, axle * 3), Color3.fromRGB(25, 25, 30))
 		end
 	end
 	vehicle.Parent = templates
 end
 assert(vehicle:IsA("Model"), "Existing PlaceholderVehicle must be a Model; setup preserves existing assets.")
+
+-- One-time upgrade for both existing and newly constructed templates. Use fixed
+-- dimensions so rerunning setup cannot keep doubling the wheels.
+if vehicle:GetAttribute("WheelGeometryVersion") ~= 2 then
+	local chassis = vehicle.PrimaryPart
+	assert(chassis, "PlaceholderVehicle needs its chassis PrimaryPart.")
+	for _, side in {-1, 1} do
+		for _, axle in {-1, 1} do
+			local name = (if axle == -1 then "Front" else "Rear") .. (if side == -1 then "Left" else "Right") .. "Wheel"
+			local wheel = vehicle:FindFirstChild(name)
+			assert(wheel and wheel:IsA("Part"), "Missing wheel: " .. name)
+			local weld = wheel:FindFirstChild(name .. "Weld")
+			assert(weld and weld:IsA("WeldConstraint"), "Missing wheel weld: " .. name)
+			weld.Enabled = false
+			wheel.Size = Vector3.new(1.6, 2.8, 2.8)
+			wheel.Shape = Enum.PartType.Cylinder
+			wheel.CFrame = chassis.CFrame * CFrame.new(side * 3.6, 0, axle * 3)
+			wheel.CanCollide = true
+			wheel.CustomPhysicalProperties = PhysicalProperties.new(1, 0.1, 0, 100, 100)
+			weld.Enabled = true
+		end
+	end
+	vehicle:SetAttribute("WheelGeometryVersion", 2)
+end
 
 local marker = Workspace:FindFirstChild("PlaceholderVehicleSpawn")
 if not marker then
@@ -99,4 +123,4 @@ assert(marker:IsA("BasePart"), "Existing PlaceholderVehicleSpawn must be a BaseP
 Workspace:SetAttribute("EnablePlaceholderVehicleTest", true)
 ChangeHistoryService:SetWaypoint("Created placeholder vehicle")
 game:GetService("Selection"):Set({vehicle, marker})
-print("Placeholder vehicle ready. Save the place, sync the branch, then Play. Existing assets were preserved.")
+print("Placeholder vehicle ready with 2.8-stud collidable wheels. Save the place, sync the branch, then Play.")

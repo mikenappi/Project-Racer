@@ -3,7 +3,8 @@
 This fixture provides a reusable model, seating, a consistent forward direction,
 basic ground collision, and a temporary seated forward-motion test. Player-controlled
 acceleration, steering, suspension, race spawning, and automatic respawn are later
-work. The wheels are welded visual placeholders.
+work. The enlarged wheels are welded, collidable cylinders; they slide over
+the ground during this test rather than rotating on axles.
 
 ## One-time Studio setup
 
@@ -25,10 +26,13 @@ work. The wheels are welded visual placeholders.
 If the test area has no flat ground there, select `PlaceholderVehicleSpawn` in
 Explorer and move it above an empty flat area. The marker's height is a raycast
 starting point, not the final vehicle height. Keep it upright; Y rotation chooses
-the vehicle's heading. Allow at least a clear 8 by 12 stud area and room overhead.
+the vehicle's heading. Allow at least a clear 10 by 12 stud area and room overhead.
 
-Setup is safe to rerun: existing template and marker edits are preserved.
-It re-enables the test attribute. To rebuild deliberately, rename the old template
+Setup is safe to rerun. On the first run of the enlarged-wheel version, it upgrades
+the four existing wheels to fixed dimensions of 1.6 x 2.8 x 2.8 studs, moves their
+centers to X = +/-3.6, enables their collision, and marks `WheelGeometryVersion = 2`.
+Repeated runs do not double their size again. Other model and marker edits are
+preserved. It re-enables the test attribute. To rebuild deliberately, rename the old template
 in Studio first, then rerun setup. Do not put models or parts in Script Sync roots.
 The setup file records the initial construction recipe; the saved Studio model
 remains the source of truth for subsequent asset edits.
@@ -37,19 +41,21 @@ remains the source of truth for subsequent asset edits.
 
 | Item | Purpose |
 | --- | --- |
-| `Chassis` | PrimaryPart, physics root, and the only collidable part; 6 x 1.4 x 10 studs |
+| `Chassis` | PrimaryPart, physics root, and body collider; 6 x 1.4 x 10 studs |
 | `FrontMarker` | Green strip at local negative Z |
 | `RearMarker` | Red strip at local positive Z |
 | `DriverSeat` | VehicleSeat facing the same direction as Chassis; touch to sit |
 | `DriverSeat/DriverAttachment` | Named reference at the seat surface for future mounting logic |
-| Four named wheels | Non-collidable, massless decoration, welded to Chassis |
+| Four named wheels | Massless, collidable cylinders, welded to Chassis; diameter 2.8, width 1.6 studs |
 | WeldConstraints | Keep seat and decorations in one rigid assembly |
 
 The model pivot is the chassis center. `vehicle:GetPivot().LookVector` is forward.
 The DriverAttachment is a reference point; VehicleSeat supplies the actual
 character weld. The stored chassis is anchored, while spawned copies are unanchored.
-The chassis underside and visible wheel bottoms align at local Y = -0.7.
-If you change these dimensions, update the ground-placement calculation as needed.
+The chassis underside is at local Y = -0.7; wheel bottoms are at Y = -1.4.
+This gives 0.7 studs of body clearance on flat ground. Wheel friction is kept low
+for the temporary sliding test. `VehicleService.getGroundSupport` measures the
+lowest colliders for spawn height, ground detection, and acceptance checks.
 
 ## Reusing it from server code
 
@@ -61,15 +67,15 @@ local vehicle = VehicleService.spawn(CFrame.new(0, 5, 0))
 vehicle:Destroy()
 
 -- Find ground beneath an upright marker, preserving its heading.
--- Returns nil with a warning if there is no flat ground or the chassis is blocked.
+-- Returns nil with a warning if there is no flat ground or a collider is blocked.
 local marker = workspace.PlaceholderVehicleSpawn
 local groundedVehicle = VehicleService.spawnOnGround(marker.CFrame)
 ```
 
 Spawns clone the saved template into `Workspace/Vehicles`; they never move the
 template out of ServerStorage. `spawnOnGround` excludes active vehicles from its
-ground ray and checks the chassis volume for obstacles before spawning.
-It assumes flat terrain beneath the full chassis, so inspect edges and overhangs
+ground ray and checks each collidable part's volume for obstacles before spawning.
+It assumes flat terrain beneath the vehicle, so inspect edges and overhangs
 visually. Use separate clear positions when spawning multiple vehicles.
 
 `VehicleTest.server.luau` creates one test vehicle per Studio session when the
@@ -98,20 +104,23 @@ Tune `TestDriveSpeed` and `TestDriveAcceleration` in `VehicleConfig`, or set
 `TestDriveEnabled = false` to return to the stationary fixture. Restart Play
 after changing configuration. No setup-command rerun is needed for this feature.
 
-The current wheels are 1.4 studs in diameter and decorative. The chassis is the
-ground collider, so this motion test helps judge proportions; it does not test
-wheel traction, rotation, or suspension. Inspect those proportions while riding,
-then test stopping at a wall and jumping off before accepting the motion test.
+The current wheels are 2.8 studs in diameter and provide rounded ground collision.
+They remain welded, so this is not rolling-wheel traction or suspension. Inspect
+the proportions while riding, then test a shallow ramp, an anchored wall, and
+jumping off. A ramp's entry should meet the floor: a raised vertical lip is a
+separate obstacle from its slope. The enlarged-wheel ramp behavior still needs
+to be confirmed in Studio.
 
 ## Acceptance checks in Studio
 
-The initial play-test spawn was confirmed in Studio's log on September 23, 2026.
-The remaining acceptance checks are not yet confirmed.
+The initial play-test spawn and all original stationary acceptance checks were
+confirmed in Studio's log on September 23, 2026 (including the 20:56 UTC run).
+Rerun the checks after upgrading the wheels; that geometry is not yet verified.
 
 With Script Sync connected, stop and restart Play after updating the branch.
 `VehicleChecks` now runs automatically in the Studio test, taking about eight
 seconds. It verifies the visible model's connected assembly, seat/marker direction,
-and settled floor contact at the center and four corners. It then spawns three
+and settled floor contact beneath each supporting collider. It then spawns three
 independent copies at 0, 90, and 180 degrees on a temporary isolated floor above
 the map, checks their orientation and physics, and removes those copies and floor.
 The original visible vehicle stays in place. The saved template must stay intact.
@@ -132,6 +141,7 @@ test actual seating as well. Do not mark the issue complete based on syntax alon
 | While playing, call `spawnOnGround` again at the occupied marker | Returns nil and warns; no overlapping duplicate |
 | Move marker over empty space beyond the floor, then Play | Warns instead of spawning a falling vehicle |
 | Disable the Workspace test attribute, then Play | No automatic test vehicle |
+| Drive onto a shallow ramp with its entry flush to the floor | Rounded wheels meet the ramp; body stays clear and the vehicle climbs |
 | Start a local server with two clients | Both clients see the same vehicle; only one driver occupies the seat |
 
 Restore the marker over flat ground and the test attribute afterward if needed.

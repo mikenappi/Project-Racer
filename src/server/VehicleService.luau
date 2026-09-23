@@ -7,6 +7,33 @@ local Workspace = game:GetService("Workspace")
 local VehicleConfig = require(ReplicatedStorage:WaitForChild("shared"):WaitForChild("VehicleConfig"))
 local VehicleService = {}
 
+-- Distance from the pivot to the lowest colliders when upright, plus those
+-- supporting parts. This works for the original chassis and the taller wheels.
+function VehicleService.getGroundSupport(vehicle: Model): (number, {BasePart})
+	local lowest = math.huge
+	local bottoms: {[BasePart]: number} = {}
+	local pivot = vehicle:GetPivot()
+	for _, part in vehicle:GetDescendants() do
+		if part:IsA("BasePart") and part.CanCollide then
+			local relative = pivot:ToObjectSpace(part.CFrame)
+			local halfHeight = (math.abs(relative.RightVector.Y) * part.Size.X
+				+ math.abs(relative.UpVector.Y) * part.Size.Y
+				+ math.abs(relative.LookVector.Y) * part.Size.Z) / 2
+			local bottom = relative.Position.Y - halfHeight
+			bottoms[part] = bottom
+			lowest = math.min(lowest, bottom)
+		end
+	end
+	assert(lowest < math.huge, "Vehicle must contain a collidable part.")
+	local supports: {BasePart} = {}
+	for part, bottom in bottoms do
+		if math.abs(bottom - lowest) < 0.05 then
+			table.insert(supports, part)
+		end
+	end
+	return -lowest, supports
+end
+
 local function getTemplate(): Model
 	local templates = ServerStorage:FindFirstChild(VehicleConfig.TemplateFolderName)
 	local template = if templates then templates:FindFirstChild(VehicleConfig.TemplateName) else nil
@@ -74,13 +101,19 @@ function VehicleService.spawnOnGround(markerCFrame: CFrame): Model?
 		return nil
 	end
 
-	local position = ground.Position + Vector3.new(0, chassis.Size.Y / 2 + VehicleConfig.GroundClearance, 0)
+	local groundOffset = VehicleService.getGroundSupport(template)
+	local position = ground.Position + Vector3.new(0, groundOffset + VehicleConfig.GroundClearance, 0)
 	local spawnCFrame = CFrame.new(position) * markerCFrame.Rotation
 	local overlapParams = OverlapParams.new()
 	overlapParams.RespectCanCollide = true
-	if #Workspace:GetPartBoundsInBox(spawnCFrame, chassis.Size, overlapParams) > 0 then
-		warn("PlaceholderVehicle spawn is occupied. Move the marker or remove the previous vehicle.")
-		return nil
+	for _, part in template:GetDescendants() do
+		if part:IsA("BasePart") and part.CanCollide then
+			local partCFrame = spawnCFrame * template:GetPivot():ToObjectSpace(part.CFrame)
+			if #Workspace:GetPartBoundsInBox(partCFrame, part.Size, overlapParams) > 0 then
+				warn("PlaceholderVehicle spawn is occupied. Move the marker or remove the previous vehicle.")
+				return nil
+			end
+		end
 	end
 	return VehicleService.spawn(spawnCFrame)
 end
