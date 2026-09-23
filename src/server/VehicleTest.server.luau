@@ -20,7 +20,15 @@ end
 
 local vehicle = VehicleService.spawnOnGround(marker.CFrame)
 if vehicle then
-	print("PlaceholderVehicle spawned. Green = front. Jump onto DriverSeat to sit; driving comes later.")
+	print("PlaceholderVehicle spawned. Checking physics before enabling the seated motion test...")
 	local VehicleChecks = require(script.Parent:WaitForChild("VehicleChecks"))
-	VehicleChecks.run(vehicle, marker.CFrame)
+	local passed = VehicleChecks.run(vehicle, marker.CFrame)
+	if passed and VehicleConfig.TestDriveEnabled then
+		local VehicleTestDrive = require(script.Parent:WaitForChild("VehicleTestDrive"))
+		local stopDriving = VehicleTestDrive.start(vehicle)
+		script.Destroying:Connect(stopDriving)
+		print("[Issue 7] Forward-motion test ready: sit to move toward the green nose; jump out to brake.")
+	elseif not passed then
+		warn("[Issue 7] Forward-motion test stayed off because the vehicle checks failed.")
+	end
 end

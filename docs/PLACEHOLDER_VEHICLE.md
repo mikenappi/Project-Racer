@@ -1,8 +1,9 @@
 # Placeholder vehicle (Issue 7)
 
 This fixture provides a reusable model, seating, a consistent forward direction,
-and basic ground collision. Acceleration, steering, suspension, race spawning,
-and automatic respawn are later work. The wheels are welded visual placeholders.
+basic ground collision, and a temporary seated forward-motion test. Player-controlled
+acceleration, steering, suspension, race spawning, and automatic respawn are later
+work. The wheels are welded visual placeholders.
 
 ## One-time Studio setup
 
@@ -76,6 +77,31 @@ Workspace attribute is enabled. It never auto-spawns in published servers.
 Set `EnablePlaceholderVehicleTest` to false when a race system takes over spawning.
 This fixture uses server network ownership; future controls must choose their
 own ownership policy. No client input, RemoteEvents, or race logic is added here.
+
+## Seated forward-motion test
+
+After the automatic checks pass (about eight seconds after Play), Output prints
+`Forward-motion test ready`. Sit in DriverSeat to move toward the green nose at a
+target of 12 studs/second. Jump out to apply the brake. An anchored collidable wall
+should block the car; movable objects may be pushed. There is no steering yet.
+Stop/Play resets the vehicle to its marker.
+
+`VehicleTestDrive` uses a force-limited horizontal LinearVelocity constraint.
+It applies drive only for a living player in the seat while the car is upright
+and on the ground. Gravity and collision remain active. An empty seat targets zero
+horizontal velocity for braking; braking takes a short distance rather than
+teleporting the vehicle to a stop. The mover is disabled in the air or when tipped.
+The test activates only on the visible Studio fixture after its stationary checks;
+it is not attached to the saved template or the temporary acceptance-test copies.
+
+Tune `TestDriveSpeed` and `TestDriveAcceleration` in `VehicleConfig`, or set
+`TestDriveEnabled = false` to return to the stationary fixture. Restart Play
+after changing configuration. No setup-command rerun is needed for this feature.
+
+The current wheels are 1.4 studs in diameter and decorative. The chassis is the
+ground collider, so this motion test helps judge proportions; it does not test
+wheel traction, rotation, or suspension. Inspect those proportions while riding,
+then test stopping at a wall and jumping off before accepting the motion test.
 
 ## Acceptance checks in Studio
 
