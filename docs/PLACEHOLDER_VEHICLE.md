@@ -1,23 +1,24 @@
 # Placeholder vehicle (Issue 7)
 
 This fixture provides a reusable model, seating, a consistent forward direction,
-basic ground collision, and a temporary seated forward-motion test. Player-controlled
-acceleration, steering, suspension, race spawning, and automatic respawn are later
-work. The enlarged wheels are welded, collidable cylinders; they slide over
+basic ground collision, and stationary acceptance checks. Player-controlled movement
+is now implemented by [Issue 8](VEHICLE_MOVEMENT.md). Suspension, race spawning,
+and automatic respawn remain later work. The enlarged wheels are welded, collidable cylinders; they slide over
 the ground during this test rather than rotating on axles.
 
 ## One-time Studio setup
 
-If the vehicle already exists, this speed/wheel update needs only Script Sync and
+If the vehicle already exists, Issue 8 needs only Script Sync and
 a new Play session. The Studio test applies 2.8-stud wheels to each spawned copy,
 even when the saved template still has the original small wheels. No Command Bar
 paste is required for testing. Output reports the wheel diameter and target speed.
 The saved edit-mode template changes only if you deliberately rerun setup below.
 
-1. Check out `feat/placeholder-vehicle` locally and open the Development place.
+1. Check out the current working branch locally and open the Development place.
 2. Stop any play test. Start the existing native Script Sync connections.
    Keep the existing lowercase roots: `ServerScriptService/server` maps to
-   `src/server`, and `ReplicatedStorage/shared` maps to `src/shared`.
+   `src/server`, `ReplicatedStorage/shared` maps to `src/shared`, and
+   `StarterPlayer/StarterPlayerScripts/client` maps to `src/client`.
 3. Open `tools/SetupPlaceholderVehicle.luau` in your editor, copy the entire
    file, paste it into Studio's **Command Bar**, and press **Ctrl + Enter**.
    This is an edit-mode setup command, not a synced game script.
@@ -26,8 +27,8 @@ The saved edit-mode template changes only if you deliberately rerun setup below.
    `Workspace/PlaceholderVehicleSpawn`, and the boolean Workspace attribute
    `EnablePlaceholderVehicleTest = true`.
 5. Press **Play**. A vehicle should appear about 14 studs to the world-right
-   of the player spawn, on the ground below the marker. Jump onto the seat.
-   Check Output for setup errors or warnings.
+   of the player spawn, on the ground below the marker. Wait for the
+   stationary checks before sitting. Check Output for errors or warnings.
 
 If the test area has no flat ground there, select `PlaceholderVehicleSpawn` in
 Explorer and move it above an empty flat area. The marker's height is a raycast
@@ -61,7 +62,7 @@ character weld. The stored chassis is anchored, while spawned copies are unancho
 The chassis underside is at local Y = -0.7; wheel bottoms are at Y = -1.4.
 This gives 0.7 studs of body clearance on flat ground. These dimensions apply to
 the upgraded template and the automatic Studio-test overrides. Wheel friction is kept low
-for the temporary sliding test. `VehicleService.getGroundSupport` measures the
+for the arcade movement controller. `VehicleService.getGroundSupport` measures the
 lowest colliders for spawn height, ground detection, and acceptance checks.
 
 ## Reusing it from server code
@@ -91,37 +92,18 @@ visually. Use separate clear positions when spawning multiple vehicles.
 `VehicleTest.server.luau` creates one test vehicle per Studio session when the
 Workspace attribute is enabled. It never auto-spawns in published servers.
 Set `EnablePlaceholderVehicleTest` to false when a race system takes over spawning.
-This fixture uses server network ownership; future controls must choose their
-own ownership policy. No client input, RemoteEvents, or race logic is added here.
+Movement uses server network ownership and the existing VehicleSeat. By default,
+new VehicleService spawns receive controls automatically. Pass `false` as the second
+argument to either spawn function for a passive fixture; enable controls later
+with `vehicle:SetAttribute("MovementEnabled", true)`. The automatic Issue 7 checks
+use passive copies and enable only the visible car once all checks pass.
 
-## Seated forward-motion test
+## Driving the placeholder
 
-After the automatic checks pass (about eight seconds after Play), Output prints
-`Forward-motion test ready`. Sit in DriverSeat to move toward the green nose at a
-target of 48 studs/second. Jump out to apply the brake. An anchored collidable wall
-should block the car; movable objects may be pushed. There is no steering yet.
-Stop/Play resets the vehicle to its marker.
-
-`VehicleTestDrive` uses a force-limited horizontal LinearVelocity constraint.
-It applies drive only for a living player in the seat while the car is upright
-and on the ground. Gravity and collision remain active. An empty seat targets zero
-horizontal velocity for braking; braking takes a short distance rather than
-teleporting the vehicle to a stop. The mover is disabled in the air or when tipped.
-The test activates only on the visible Studio fixture after its stationary checks;
-it is not attached to the saved template or the temporary acceptance-test copies.
-
-Tune `TestDriveSpeed` and `TestDriveAcceleration` in `VehicleConfig`, or set
-`TestDriveEnabled = false` to return to the stationary fixture. Restart Play
-after changing configuration. No setup-command rerun is needed for this feature.
-`TestWheelDiameter` and `TestWheelWidth` control the wheel overrides on Studio
-test copies. Turning off the Workspace test attribute disables the entire fixture.
-
-The current wheels are 2.8 studs in diameter and provide rounded ground collision.
-They remain welded, so this is not rolling-wheel traction or suspension. Inspect
-the proportions while riding, then test a shallow ramp, an anchored wall, and
-jumping off. A ramp's entry should meet the floor: a raised vertical lip is a
-separate obstacle from its slope. The enlarged-wheel ramp behavior still needs
-to be confirmed in Studio.
+Issue 8 replaces the old automatic seated-forward test. See
+[Vehicle movement](VEHICLE_MOVEMENT.md) for W/S/A/D controls, tuning, and testing.
+The wheels remain welded cylinders; no setup-command rerun or suspension is needed.
+A ramp entry must meet the floor; a raised vertical lip is a separate obstacle.
 
 ## Acceptance checks in Studio
 
