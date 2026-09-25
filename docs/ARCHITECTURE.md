@@ -644,6 +644,20 @@ Project Racer should generally follow these rules:
 
 ---
 
+## Current vehicle movement (Issue 8)
+
+The current implementation uses the existing lowercase Script Sync roots.
+`src/client/InputController.local.luau` reads the seated player's VehicleSeat input
+and sends it through `ReplicatedStorage/Remotes/VehicleInput`. The server creates
+this RemoteEvent; nothing needs to be inserted manually in Studio.
+
+`src/server/VehicleController.server.luau` validates the occupant, clamps input,
+expires stale input, and runs finite-force arcade physics on server-owned vehicles.
+The Controller filename is an intentional Issue 8 naming exception. VehicleService
+still owns cloning/spawning; the setup tool only creates/upgrades Studio assets.
+`src/shared/VehicleConfig.luau` holds all movement tuning. See
+[Vehicle movement](VEHICLE_MOVEMENT.md) for the implementation map and test steps.
+
 ## References
 
 Roblox Creator Documentation:
