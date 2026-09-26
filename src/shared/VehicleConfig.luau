@@ -11,7 +11,7 @@ local VehicleConfig = {
 	TestWheelWidth = 1.6,
 
 	-- Horizontal speed in studs/second; acceleration in studs/second squared.
-	MaxForwardSpeed = 48,
+	MaxForwardSpeed = 1000,
 	MaxReverseSpeed = 18,
 	Acceleration = 45,
 	Braking = 90,
