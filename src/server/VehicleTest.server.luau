@@ -18,18 +18,16 @@ if not marker or not marker:IsA("BasePart") then
 	return
 end
 
-local vehicle = VehicleService.spawnOnGround(marker.CFrame)
+local vehicle = VehicleService.spawnOnGround(marker.CFrame, false)
 if vehicle then
-	print(string.format("[Issue 7] Test settings: %.1f-stud wheels; target speed %.0f studs/second.", VehicleConfig.TestWheelDiameter, VehicleConfig.TestDriveSpeed))
-	print("PlaceholderVehicle spawned. Checking physics before enabling the seated motion test...")
+	print(string.format("[Issue 8] %.1f-stud wheels; forward %.0f / reverse %.0f studs/second.", VehicleConfig.TestWheelDiameter, VehicleConfig.MaxForwardSpeed, VehicleConfig.MaxReverseSpeed))
+	print("PlaceholderVehicle spawned. Wait for stationary checks before sitting...")
 	local VehicleChecks = require(script.Parent:WaitForChild("VehicleChecks"))
 	local passed = VehicleChecks.run(vehicle, marker.CFrame)
-	if passed and VehicleConfig.TestDriveEnabled then
-		local VehicleTestDrive = require(script.Parent:WaitForChild("VehicleTestDrive"))
-		local stopDriving = VehicleTestDrive.start(vehicle)
-		script.Destroying:Connect(stopDriving)
-		print("[Issue 7] Forward-motion test ready: sit to move toward the green nose; jump out to brake.")
-	elseif not passed then
-		warn("[Issue 7] Forward-motion test stayed off because the vehicle checks failed.")
+	if passed then
+		vehicle:SetAttribute("MovementEnabled", true)
+		print("[Issue 8] Controls ready: W accelerate, S brake/reverse, A/D steer; jump out to brake.")
+	else
+		warn("[Issue 8] Controls stayed off because the placeholder checks failed.")
 	end
 end

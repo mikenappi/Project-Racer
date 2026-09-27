@@ -90,7 +90,7 @@ local function createVehicle(): Model
 	return vehicle
 end
 
-local function placeVehicle(vehicle: Model, spawnCFrame: CFrame): Model
+local function placeVehicle(vehicle: Model, spawnCFrame: CFrame, movementEnabled: boolean?): Model
 	local folder = getActiveFolder()
 	vehicle:PivotTo(spawnCFrame)
 	for _, descendant in vehicle:GetDescendants() do
@@ -100,8 +100,10 @@ local function placeVehicle(vehicle: Model, spawnCFrame: CFrame): Model
 			descendant.AssemblyAngularVelocity = Vector3.zero
 		end
 	end
+	-- Stationary acceptance copies opt out before the controller sees the model.
+	vehicle:SetAttribute("MovementEnabled", movementEnabled ~= false)
 	vehicle.Parent = folder
-	-- Keep this passive physics fixture server-owned until vehicle controls define ownership.
+	-- Issue 8 physics and validated player input are handled on the server.
 	local chassis = vehicle.PrimaryPart
 	assert(chassis)
 	chassis:SetNetworkOwner(nil)
@@ -109,12 +111,12 @@ local function placeVehicle(vehicle: Model, spawnCFrame: CFrame): Model
 end
 
 -- spawnCFrame is the chassis center; its LookVector is the vehicle's forward direction.
-function VehicleService.spawn(spawnCFrame: CFrame): Model
-	return placeVehicle(createVehicle(), spawnCFrame)
+function VehicleService.spawn(spawnCFrame: CFrame, movementEnabled: boolean?): Model
+	return placeVehicle(createVehicle(), spawnCFrame, movementEnabled)
 end
 
 -- The marker must be above a clear, flat surface and rotated only around world Y.
-function VehicleService.spawnOnGround(markerCFrame: CFrame): Model?
+function VehicleService.spawnOnGround(markerCFrame: CFrame, movementEnabled: boolean?): Model?
 	assert(markerCFrame.UpVector:Dot(Vector3.yAxis) > 0.999, "Vehicle spawn markers must be upright.")
 	local params = RaycastParams.new()
 	params.RespectCanCollide = true
@@ -148,7 +150,7 @@ function VehicleService.spawnOnGround(markerCFrame: CFrame): Model?
 			end
 		end
 	end
-	return placeVehicle(vehicle, spawnCFrame)
+	return placeVehicle(vehicle, spawnCFrame, movementEnabled)
 end
 
 return VehicleService

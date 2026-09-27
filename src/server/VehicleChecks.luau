@@ -90,7 +90,7 @@ function VehicleChecks.run(visibleVehicle: Model, markerCFrame: CFrame): boolean
 		-- Independent copies on an isolated floor avoid deleting the user's visible vehicle.
 		for _, degrees in {0, 90, 180} do
 			local testMarker = (floor.CFrame + Vector3.new(0, 8, 0)) * CFrame.Angles(0, math.rad(degrees), 0)
-			local copy = VehicleService.spawnOnGround(testMarker)
+			local copy = VehicleService.spawnOnGround(testMarker, false)
 			assert(copy and copy ~= template and copy ~= visibleVehicle, "Could not create an independent copy.")
 			table.insert(temporaryInstances, copy)
 			assert(#copy:GetDescendants() == originalCount, "Spawn did not preserve the whole model.")
