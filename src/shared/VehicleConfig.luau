@@ -13,7 +13,7 @@ local VehicleConfig = {
 	-- Horizontal speed in studs/second; acceleration in studs/second squared.
 	MaxForwardSpeed = 48,
 	MaxReverseSpeed = 18,
-	Acceleration = 45,
+	Acceleration = 100,
 	Braking = 90,
 	CoastDeceleration = 12,
 	StopSpeed = 0.75, -- Brake to rest / permit direction changes below this speed.
