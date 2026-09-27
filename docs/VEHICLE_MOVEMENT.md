@@ -26,6 +26,7 @@ Within the server controller:
 | --- | --- |
 | `getDriveTarget` | W acceleration, S braking/reverse, reverse-to-forward braking, neutral coasting, exit braking |
 | `stepVehicle` / `getYawTarget` | Speed caps, finite drive/brake force, sideways grip, speed-sensitive steering, ramp alignment |
+| `getDriveForce` / `smoothToward` | Gradual power/brake application and frame-rate-independent response |
 | `getGroundNormal` | Wheel-area ground probes; no suspension forces |
 | `getDriver` / RemoteEvent handler | Require a living seated player, reject invalid numbers, clamp/rate-limit input |
 | `startVehicle` / `resetDriver` | Create runtime movers, keep server ownership, clear previous-driver input |
@@ -42,7 +43,9 @@ Within the server controller:
 
 The server reads actual speed each step and chooses a bounded target. A horizontal
 LinearVelocity with separate forward/sideways force limits supplies acceleration
-and grip at the assembly's center of mass. It does not teleport the model or
+and grip at the assembly's center of mass. Driver acceleration/braking builds
+gradually, and sideways momentum decays over time instead of being forced
+immediately to zero. It does not teleport the model or
 overwrite its velocity. Vertical motion remains free for gravity and ramps.
 An AngularVelocity constraint has finite torque, smooths steering, damps unwanted
 rotation, and aligns the chassis toward the detected ground normal.
@@ -105,7 +108,7 @@ No movers or RemoteEvents need to be pasted into the Command Bar.
 | --- | --- | --- |
 | Forward/reverse/steer | Hold W on flat ground; release; hold S from forward speed and keep holding | Smooth acceleration, coasting stop, braking before reversal |
 | Forward/reverse/steer | Try A and D going forward, then in reverse; try steering while stationary | Correct directions; no stationary spin; reversed yaw when backing up |
-| Bounded speed | Hold W for 15 seconds in a clear straight line; repeat S in reverse | ForwardSpeed plateaus near +48 and -18; never keeps increasing |
+| Bounded speed | Temporarily set MaxForwardSpeed = 48; restart, hold W for 15 seconds in a clear straight line, repeat S in reverse | ForwardSpeed plateaus near +48 and -18; never keeps increasing. Restore your preferred cap afterward. |
 | Adjustable variables | Set MaxForwardSpeed to 30, MaxReverseSpeed to 10, Acceleration to 25; restart Play | Lower caps and slower acceleration without controller edits |
 | Adjustable variables | Change Braking, CoastDeceleration, and TurningStrength individually; restart each time | Clearly different stopping/coasting/turning behavior |
 | Stable driving | Alternate A/D at low speed and full speed on flat ground | Controlled turns, limited sideways sliding, no persistent spin/tipping |
@@ -131,22 +134,39 @@ Explorer and spawn again to check that no stale controller keeps running.
 
 All values are in `src/shared/VehicleConfig.luau`; restart Play after editing.
 
-| Setting | Default | Effect |
+| Setting | Current value | Effect |
 | --- | --- | --- |
-| MaxForwardSpeed | 48 | Forward cap, studs/second |
+| MaxForwardSpeed | 1000 | Forward cap, studs/second |
 | MaxReverseSpeed | 18 | Reverse cap, studs/second |
-| Acceleration | 45 | Available acceleration, studs/second squared |
+| Acceleration | 100 | Available acceleration, studs/second squared |
 | Braking | 90 | Opposite-input, exit, timeout, and near-rest brake strength |
-| CoastDeceleration | 12 | Slowing when W/S is released; higher stops sooner |
-| StopSpeed | 0.75 | Near-stop threshold for direction changes and holding still |
+| AccelerationResponse | 5 | How quickly drive force builds; lower feels softer |
+| BrakingResponse | 8 | How quickly driver braking builds; lower feels softer |
+| CoastDeceleration | 6 | Slowing when W/S is released; higher stops sooner |
+| StopSpeed | 0.25 | Near-stop threshold for direction changes and holding still |
 | TurningStrength | 1.6 | Maximum yaw rate, radians/second |
 | SteeringFullSpeed | 12 | Speed where low-speed steering reaches full strength |
-| HighSpeedSteeringScale | 0.55 | Steering multiplier at forward maximum speed |
-| SteeringResponse | 8 | How quickly steering builds and settles |
+| SteeringFadeSpeed | 48 | Speed where high-speed steering reduction reaches full strength |
+| HighSpeedSteeringScale | 0.55 | Steering multiplier at SteeringFadeSpeed and above |
+| SteeringResponse | 4.5 | How quickly steering builds and settles |
 | LateralGrip | 90 | Available sideways correction acceleration |
+| LateralResponse | 4 | How quickly lateral motion fades; lower carries more momentum through turns |
 | StabilityStrength | 6 | Pitch/roll correction toward the ramp/floor normal |
 | MaxTiltCorrection | 2 | Maximum corrective pitch/roll rate |
 | AngularTorquePerMass | 600 | Torque budget for steering and stability |
+
+The user's speed experiments (forward cap 1000 and acceleration 100) are preserved.
+For a short, repeatable handling comparison, temporarily use a forward cap of 48;
+the 1000 setting requires a much larger test area. SteeringFadeSpeed is separate
+from the cap so speed experiments no longer remove normal-speed steering reduction.
+
+The September 27 feel pass softens throttle/brake onset, lengthens coasting,
+reduces steering response from 8 to 4.5, and adds gradual lateral momentum decay.
+It preserves full exit/timeout braking, near-rest holding, overspeed recovery,
+existing ramp alignment, and airborne disabling. No model/setup rerun is needed.
+Compare W taps, W release, S braking/reversal, and alternating A/D at the same speed.
+Judge the feel in Studio; mathematical smoothing alone cannot establish that it
+matches the desired arcade handling.
 
 Acceleration/braking are force-per-mass limits; friction and slopes affect measured
 acceleration. Tune speed and acceleration first, then braking/coasting, then turning

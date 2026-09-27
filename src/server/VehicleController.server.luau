@@ -10,6 +10,7 @@ local VehicleService = require(script.Parent:WaitForChild("VehicleService"))
 local EPSILON = 0.001
 for _, key in {"MaxForwardSpeed", "MaxReverseSpeed", "Acceleration", "Braking",
 	"CoastDeceleration", "StopSpeed", "SteeringFullSpeed", "SteeringResponse",
+	"AccelerationResponse", "BrakingResponse", "SteeringFadeSpeed", "LateralResponse",
 	"LateralGrip", "AngularTorquePerMass", "InputSendInterval", "InputTimeout"} do
 	assert((Config :: any)[key] > 0, key .. " must be positive.")
 end
@@ -31,6 +32,7 @@ if not inputRemote then
 end
 assert(inputRemote:IsA("RemoteEvent"), "VehicleInput must be a RemoteEvent.")
 
+type DriveMode = "Drive" | "Brake" | "Coast" | "Hold"
 type DriveState = {
 	vehicle: Model,
 	chassis: BasePart,
@@ -45,6 +47,8 @@ type DriveState = {
 	steer: number,
 	lastInput: number,
 	yawRate: number,
+	driveForce: number,
+	driveMode: DriveMode,
 	occupantConnection: RBXScriptConnection?,
 }
 local states: {[VehicleSeat]: DriveState} = {}
@@ -77,20 +81,35 @@ end)
 
 -- Choose a bounded target; finite force supplies acceleration rather than
 -- overwriting velocity. Opposite input must brake before changing direction.
-local function getDriveTarget(speed: number, throttle: number, hasInput: boolean): (number, number)
-	if not hasInput then return 0, Config.Braking end
+local function getDriveTarget(speed: number, throttle: number, hasInput: boolean): (number, number, DriveMode)
+	if not hasInput then return 0, Config.Braking, "Hold" end
 	if throttle == 0 then
-		return 0, if math.abs(speed) <= Config.StopSpeed then Config.Braking else Config.CoastDeceleration
+		if math.abs(speed) <= Config.StopSpeed then return 0, Config.Braking, "Hold" end
+		return 0, Config.CoastDeceleration, "Coast"
 	end
 	if speed * throttle < 0 and math.abs(speed) > Config.StopSpeed then
-		return 0, Config.Braking
+		return 0, Config.Braking, "Brake"
 	end
 	local limit = if throttle > 0 then Config.MaxForwardSpeed else Config.MaxReverseSpeed
-	return throttle * limit, Config.Acceleration
+	return throttle * limit, Config.Acceleration, "Drive"
+end
+
+local function smoothToward(current: number, target: number, response: number, dt: number): number
+	return current + (target - current) * (1 - math.exp(-response * dt))
+end
+
+local function getDriveForce(current: number, previousMode: DriveMode, mode: DriveMode,
+	acceleration: number, dt: number): number
+	-- Releasing throttle immediately selects gentle coasting. Missing driver input,
+	-- near-rest holding, and overspeed recovery keep their full braking budget.
+	if mode == "Hold" or mode == "Coast" then return acceleration end
+	if previousMode ~= mode then current = 0 end
+	local response = if mode == "Brake" then Config.BrakingResponse else Config.AccelerationResponse
+	return smoothToward(current, acceleration, response, dt)
 end
 
 local function getYawTarget(speed: number, steer: number): number
-	local speedFraction = math.clamp(math.abs(speed) / Config.MaxForwardSpeed, 0, 1)
+	local speedFraction = math.clamp(math.abs(speed) / Config.SteeringFadeSpeed, 0, 1)
 	local steeringScale = 1 - (1 - Config.HighSpeedSteeringScale) * speedFraction
 	local lowSpeedScale = math.clamp(math.abs(speed) / Config.SteeringFullSpeed, 0, 1)
 	-- D is positive seat input but right turns need negative yaw about world up.
@@ -126,6 +145,7 @@ local function stepVehicle(state: DriveState, dt: number)
 	state.vehicle:SetAttribute("MovementGrounded", normal ~= nil)
 	if not supported or not normal then
 		state.yawRate = 0
+		state.driveForce, state.driveMode = 0, "Hold"
 		return -- Gravity, air motion, and collisions are left to the engine.
 	end
 
@@ -134,22 +154,27 @@ local function stepVehicle(state: DriveState, dt: number)
 	local speed = chassis.AssemblyLinearVelocity:Dot(forward)
 	local throttle = if hasInput then state.throttle else 0
 	local steer = if hasInput then state.steer else 0
-	local target, acceleration = getDriveTarget(speed, throttle, hasInput)
+	local target, acceleration, mode: DriveMode = getDriveTarget(speed, throttle, hasInput)
 	-- If a slope or impact exceeds a speed cap, recover with braking force.
 	if speed > Config.MaxForwardSpeed or speed < -Config.MaxReverseSpeed then
 		acceleration = Config.Braking
+		mode = "Hold"
 	end
+	state.driveForce = getDriveForce(state.driveForce, state.driveMode, mode, acceleration, dt)
+	state.driveMode = mode
 
 	-- The plane is horizontal: no upward force to hover or cancel gravity.
 	-- Independent force limits allow sideways grip without changing drive tuning.
 	state.attachment.Position = chassis.CFrame:PointToObjectSpace(chassis.AssemblyCenterOfMass)
 	state.velocity.PrimaryTangentAxis = forward
 	state.velocity.SecondaryTangentAxis = right
-	state.velocity.PlaneVelocity = Vector2.new(target, 0)
-	state.velocity.MaxPlanarAxesForce = Vector2.new(acceleration, Config.LateralGrip) * chassis.AssemblyMass
+	local sideSpeed = chassis.AssemblyLinearVelocity:Dot(right)
+	local lateralTarget = smoothToward(sideSpeed, 0, Config.LateralResponse, dt)
+	state.velocity.PlaneVelocity = Vector2.new(target, lateralTarget)
+	state.velocity.MaxPlanarAxesForce = Vector2.new(state.driveForce, Config.LateralGrip) * chassis.AssemblyMass
 
 	local yawTarget = getYawTarget(speed, steer)
-	state.yawRate += (yawTarget - state.yawRate) * (1 - math.exp(-Config.SteeringResponse * dt))
+	state.yawRate = smoothToward(state.yawRate, yawTarget, Config.SteeringResponse, dt)
 	-- Align toward the ground normal, not world up, so the car can pitch on ramps.
 	local correction = chassis.CFrame.UpVector:Cross(normal) * Config.StabilityStrength
 	if correction.Magnitude > Config.MaxTiltCorrection then
@@ -212,11 +237,13 @@ local function startVehicle(vehicle: Model)
 		attachment = attachment, velocity = velocity, angular = angular,
 		params = params, supports = supports, groundOffset = groundOffset,
 		throttle = 0, steer = 0, lastInput = -math.huge, yawRate = 0,
+		driveForce = 0, driveMode = "Hold",
 		occupantConnection = nil,
 	}
 	states[seat] = state
 	local function resetDriver()
 		state.throttle, state.steer, state.lastInput, state.yawRate = 0, 0, -math.huge, 0
+		state.driveForce, state.driveMode = 0, "Hold"
 		local character = if seat.Occupant then seat.Occupant.Parent else nil
 		params.FilterDescendantsInstances = if character then {vehicle, character} else {vehicle}
 		-- Reassert ownership when the seat weld changes the physical assembly.
