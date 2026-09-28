@@ -60,7 +60,11 @@ local function getDriver(seat: VehicleSeat): Player?
 	if not occupant or occupant.Health <= 0 or not character or not character:IsA("Model") then
 		return nil
 	end
-	return Players:GetPlayerFromCharacter(character)
+	local player = Players:GetPlayerFromCharacter(character)
+	local vehicle = seat.Parent
+	local ownerUserId = if vehicle then vehicle:GetAttribute("OwnerUserId") else nil
+	if ownerUserId ~= nil and (not player or player.UserId ~= ownerUserId) then return nil end
+	return player
 end
 
 local function finiteNumber(value: any): boolean
@@ -246,6 +250,12 @@ local function startVehicle(vehicle: Model)
 		state.driveForce, state.driveMode = 0, "Hold"
 		local character = if seat.Occupant then seat.Occupant.Parent else nil
 		params.FilterDescendantsInstances = if character then {vehicle, character} else {vehicle}
+		-- Ownership belongs to the spawning player, independently of physics ownership.
+		-- A different player cannot commandeer this car by sitting in it.
+		local occupant = seat.Occupant
+		if occupant and vehicle:GetAttribute("OwnerUserId") ~= nil and not getDriver(seat) then
+			occupant.Sit = false
+		end
 		-- Reassert ownership when the seat weld changes the physical assembly.
 		local canSet = chassis:CanSetNetworkOwnership()
 		if canSet then chassis:SetNetworkOwner(nil) end

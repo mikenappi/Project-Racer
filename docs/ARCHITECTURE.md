@@ -658,7 +658,16 @@ still owns cloning/spawning; the setup tool only creates/upgrades Studio assets.
 `src/shared/VehicleConfig.luau` holds all movement tuning. See
 [Vehicle movement](VEHICLE_MOVEMENT.md) for the implementation map and test steps.
 
-## References
+## Current player vehicles (Issue 9)
+
+`PlayerVehicles.server.luau` starts `PlayerVehicleService` under the existing
+server Script Sync root. That service owns player-to-vehicle records, stable
+spawn slots, character lifecycle, recovery, and disconnect cleanup. VehicleService
+continues to clone and place the existing Studio-owned template. VehicleController
+also validates the car's OwnerUserId before accepting the seated player's input.
+See [Vehicle spawning](VEHICLE_SPAWNING.md) for setup and acceptance checks.
+
+## Roblox references
 
 Roblox Creator Documentation:
 

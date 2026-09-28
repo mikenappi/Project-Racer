@@ -1,5 +1,10 @@
 # Basic vehicle movement (Issue 8)
 
+**Issue 9 update:** Normal play now uses per-player vehicles. Follow
+[Vehicle spawning](VEHICLE_SPAWNING.md) for current startup and respawn behavior.
+The standalone fixture instructions below apply with PlayerVehiclesEnabled
+disabled. Movement tuning and the stationary checks are preserved.
+
 Issue 7 / PR #13 was merged before this work. The Issue 8 branch
 `feat/basic-vehicle-movement` starts at `main` commit `d908a99`.
 The existing chassis, VehicleSeat, green nose, welds, enlarged wheels, saved template,

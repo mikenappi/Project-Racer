@@ -4,6 +4,7 @@ local ServerStorage = game:GetService("ServerStorage")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
 
 local VehicleConfig = require(ReplicatedStorage:WaitForChild("shared"):WaitForChild("VehicleConfig"))
 local VehicleService = {}
@@ -90,8 +91,12 @@ local function createVehicle(): Model
 	return vehicle
 end
 
-local function placeVehicle(vehicle: Model, spawnCFrame: CFrame, movementEnabled: boolean?): Model
+local function placeVehicle(vehicle: Model, spawnCFrame: CFrame, movementEnabled: boolean?, owner: Player?): Model
 	local folder = getActiveFolder()
+	if owner then
+		vehicle.Name = "Vehicle_" .. tostring(owner.UserId)
+		vehicle:SetAttribute("OwnerUserId", owner.UserId)
+	end
 	vehicle:PivotTo(spawnCFrame)
 	for _, descendant in vehicle:GetDescendants() do
 		if descendant:IsA("BasePart") then
@@ -106,6 +111,11 @@ local function placeVehicle(vehicle: Model, spawnCFrame: CFrame, movementEnabled
 	-- Issue 8 physics and validated player input are handled on the server.
 	local chassis = vehicle.PrimaryPart
 	assert(chassis)
+	local canSet, reason = chassis:CanSetNetworkOwnership()
+	if not canSet then
+		vehicle:Destroy()
+		error("Cannot initialize vehicle physics: " .. tostring(reason))
+	end
 	chassis:SetNetworkOwner(nil)
 	return vehicle
 end
@@ -116,11 +126,15 @@ function VehicleService.spawn(spawnCFrame: CFrame, movementEnabled: boolean?): M
 end
 
 -- The marker must be above a clear, flat surface and rotated only around world Y.
-function VehicleService.spawnOnGround(markerCFrame: CFrame, movementEnabled: boolean?): Model?
+function VehicleService.spawnOnGround(markerCFrame: CFrame, movementEnabled: boolean?, owner: Player?): Model?
 	assert(markerCFrame.UpVector:Dot(Vector3.yAxis) > 0.999, "Vehicle spawn markers must be upright.")
 	local params = RaycastParams.new()
 	params.RespectCanCollide = true
-	params.FilterDescendantsInstances = {getActiveFolder()}
+	local excluded: {Instance} = {getActiveFolder()}
+	for _, player in Players:GetPlayers() do
+		if player.Character then table.insert(excluded, player.Character) end
+	end
+	params.FilterDescendantsInstances = excluded
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	local ground = Workspace:Raycast(
 		markerCFrame.Position,
@@ -128,7 +142,7 @@ function VehicleService.spawnOnGround(markerCFrame: CFrame, movementEnabled: boo
 		params
 	)
 	if not ground or ground.Normal:Dot(Vector3.yAxis) < 0.99 then
-		warn("PlaceholderVehicle needs a flat, collidable surface below the spawn marker.")
+		if not owner then warn("PlaceholderVehicle needs a flat, collidable surface below the spawn marker.") end
 		return nil
 	end
 
@@ -145,12 +159,12 @@ function VehicleService.spawnOnGround(markerCFrame: CFrame, movementEnabled: boo
 			local partCFrame = spawnCFrame * vehicle:GetPivot():ToObjectSpace(part.CFrame)
 			if #Workspace:GetPartBoundsInBox(partCFrame, part.Size, overlapParams) > 0 then
 				vehicle:Destroy()
-				warn("PlaceholderVehicle spawn is occupied. Move the marker or remove the previous vehicle.")
+				if not owner then warn("PlaceholderVehicle spawn is occupied. Move the marker or remove the previous vehicle.") end
 				return nil
 			end
 		end
 	end
-	return placeVehicle(vehicle, spawnCFrame, movementEnabled)
+	return placeVehicle(vehicle, spawnCFrame, movementEnabled, owner)
 end
 
 return VehicleService

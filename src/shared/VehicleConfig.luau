@@ -10,6 +10,14 @@ local VehicleConfig = {
 	TestWheelDiameter = 2.8,
 	TestWheelWidth = 1.6,
 
+	-- Issue 9: everyone is a racer until race/lobby participation is implemented.
+	PlayerVehiclesEnabled = true,
+	SpawnFolderName = "VehicleSpawns", -- Optional numbered markers: 1, 2, 3...
+	SpawnColumns = 3, -- Fallback grid relative to PlaceholderVehicleSpawn.
+	SpawnSpacing = Vector3.new(16, 0, 20),
+	SpawnRetryInterval = 1, -- Retry blocked/missing spawns without making duplicates.
+	VehicleRecoveryHeight = 50, -- Studs above Workspace.FallenPartsDestroyHeight.
+
 	-- Horizontal speed in studs/second; acceleration in studs/second squared.
 	MaxForwardSpeed = 1000,
 	MaxReverseSpeed = 18,
