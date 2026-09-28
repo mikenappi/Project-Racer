@@ -2,11 +2,16 @@
 
 This fixture provides a reusable model, seating, a consistent forward direction,
 basic ground collision, and stationary acceptance checks. Player-controlled movement
-is now implemented by [Issue 8](VEHICLE_MOVEMENT.md). Suspension, race spawning,
-and automatic respawn remain later work. The enlarged wheels are welded, collidable cylinders; they slide over
+is now implemented by [Issue 8](VEHICLE_MOVEMENT.md). Per-player spawning and
+automatic replacement are covered by [Issue 9](VEHICLE_SPAWNING.md). Suspension
+remains later work. The enlarged wheels are welded, collidable cylinders; they slide over
 the ground during this test rather than rotating on axles.
 
 ## One-time Studio setup
+
+Normal play now uses per-player spawning. The existing model and setup tool are
+preserved. Standalone test instructions below apply with PlayerVehiclesEnabled
+disabled in VehicleConfig.
 
 If the vehicle already exists, Issue 8 needs only Script Sync and
 a new Play session. The Studio test applies 2.8-stud wheels to each spawned copy,

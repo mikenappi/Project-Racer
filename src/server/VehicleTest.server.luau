@@ -12,6 +12,10 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local VehicleConfig = require(ReplicatedStorage:WaitForChild("shared"):WaitForChild("VehicleConfig"))
 local VehicleService = require(script.Parent:WaitForChild("VehicleService"))
 
+-- Normal play must not spawn an extra car or wait for stationary checks.
+-- Turn PlayerVehiclesEnabled off to run this older opt-in fixture in isolation.
+if VehicleConfig.PlayerVehiclesEnabled then return end
+
 local marker = Workspace:FindFirstChild(VehicleConfig.TestSpawnName)
 if not marker or not marker:IsA("BasePart") then
 	warn("Run tools/SetupPlaceholderVehicle.luau in Studio edit mode to create the test spawn marker.")
