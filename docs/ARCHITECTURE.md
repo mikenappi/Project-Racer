@@ -667,6 +667,15 @@ continues to clone and place the existing Studio-owned template. VehicleControll
 also validates the car's OwnerUserId before accepting the seated player's input.
 See [Vehicle spawning](VEHICLE_SPAWNING.md) for setup and acceptance checks.
 
+## Current racing camera (Issue 10)
+
+`src/client/CameraController.local.luau` automatically follows the local player's
+owned vehicle while seated and restores the character camera on exit/death.
+`CameraRig.luau` handles smooth heading and position tracking with a level horizon;
+`src/shared/CameraConfig.luau` holds camera-only tuning. Vehicle replacement and
+respawn reuse the existing ownership/seat state without additional remotes.
+See [Racing camera](RACING_CAMERA.md) for tuning, Script Sync, and acceptance checks.
+
 ## Roblox references
 
 Roblox Creator Documentation:
