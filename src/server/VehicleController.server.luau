@@ -49,6 +49,7 @@ type DriveState = {
 	yawRate: number,
 	driveForce: number,
 	driveMode: DriveMode,
+	resetVersion: number,
 	occupantConnection: RBXScriptConnection?,
 }
 local states: {[VehicleSeat]: DriveState} = {}
@@ -134,6 +135,12 @@ local function getGroundNormal(state: DriveState): Vector3?
 end
 
 local function stepVehicle(state: DriveState, dt: number)
+	local resetVersion = state.vehicle:GetAttribute("ResetVersion") or 0
+	if resetVersion ~= state.resetVersion then
+		state.resetVersion = resetVersion
+		state.throttle, state.steer, state.lastInput, state.yawRate = 0, 0, -math.huge, 0
+		state.driveForce, state.driveMode = 0, "Hold"
+	end
 	local chassis = state.chassis
 	local normal = getGroundNormal(state)
 	local look = chassis.CFrame.LookVector
@@ -242,6 +249,7 @@ local function startVehicle(vehicle: Model)
 		params = params, supports = supports, groundOffset = groundOffset,
 		throttle = 0, steer = 0, lastInput = -math.huge, yawRate = 0,
 		driveForce = 0, driveMode = "Hold",
+		resetVersion = vehicle:GetAttribute("ResetVersion") or 0,
 		occupantConnection = nil,
 	}
 	states[seat] = state

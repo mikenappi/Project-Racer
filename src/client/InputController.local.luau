@@ -36,3 +36,13 @@ RunService.Heartbeat:Connect(function(dt)
 	-- Send only input; the server checks the occupant and computes all physics.
 	remote:FireServer(activeSeat, activeSeat.ThrottleFloat, activeSeat.SteerFloat)
 end)
+
+-- Keep reset input independent of the continuous driving-input loop.
+local UserInputService = game:GetService("UserInputService")
+local RaceConfig = require(ReplicatedStorage:WaitForChild("shared"):WaitForChild("RaceConfig"))
+local resetRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild(RaceConfig.ResetRemoteName)
+assert(resetRemote:IsA("RemoteEvent"), "ResetVehicle must be a RemoteEvent.")
+UserInputService.InputBegan:Connect(function(input, processed)
+	if processed or UserInputService:GetFocusedTextBox() then return end
+	if input.KeyCode == RaceConfig.ResetKey then resetRemote:FireServer() end
+end)

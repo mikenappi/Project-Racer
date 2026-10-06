@@ -123,3 +123,8 @@ The harness executes the actual PlayerVehicleService source with deterministic
 events and clock values. It covers startup, two owners, character readiness,
 death, stale callbacks, stable rotated slots, missing/blocked spawns, retries,
 asset errors, lost cars/chassis/seats, leave cleanup, and slot reuse.
+
+Checkpoint progression and R-key resets are described in [CHECKPOINTS.md](CHECKPOINTS.md).
+Manual resets retain the active vehicle and spawn slot; death/fall recovery above
+continues to spawn in the original slot. Earned progress survives replacement
+until the next race, so a subsequent manual reset returns to that checkpoint.

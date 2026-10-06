@@ -1,19 +1,27 @@
 --!strict
 
---[[
-    RaceManager
+local Players = game:GetService("Players")
+local CheckpointService = require(script.Parent:WaitForChild("CheckpointService"))
+local PlayerVehicleService = require(script.Parent:WaitForChild("PlayerVehicleService"))
+local RespawnService = require(script.Parent:WaitForChild("RespawnService"))
 
-    Main server entry point for race management.
+PlayerVehicleService.start() -- Shared idempotent lifecycle, regardless of script startup order.
+RespawnService.start()
+Players.PlayerAdded:Connect(CheckpointService.addRacer)
+Players.PlayerRemoving:Connect(CheckpointService.removeRacer)
 
-    Future responsibilities may include:
-    - Starting races
-    - Managing race states
-    - Starting the countdown
-    - Tracking active racers
-    - Detecting race completion
-    - Coordinating race-related server modules
+local function startRace()
+	local success, reason = CheckpointService.startRace(Players:GetPlayers())
+	if not success then warn("Race start failed: " .. tostring(reason)) end
+end
 
-    The server is authoritative over race state.
-]]
-
--- TODO: Implement race lifecycle management.
+-- A server-only entry point for subsequent races; clients cannot fire it.
+local startEvent = script:FindFirstChild("StartRace")
+if not startEvent then
+	startEvent = Instance.new("BindableEvent")
+	startEvent.Name = "StartRace"
+	startEvent.Parent = script
+end
+assert(startEvent:IsA("BindableEvent"), "StartRace must be a BindableEvent.")
+startEvent.Event:Connect(startRace)
+startRace()
