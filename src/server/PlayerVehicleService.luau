@@ -147,6 +147,22 @@ function PlayerVehicleService.getVehicle(player: Player): Model?
 	return if vehicle and folder and vehicle.Parent == folder then vehicle else nil
 end
 
+-- Keep the lifecycle's model and slot; a blocked reset never destroys the car.
+function PlayerVehicleService.resetVehicle(player: Player, checkpointCFrame: CFrame?): boolean
+	local state = states[player]
+	local vehicle = PlayerVehicleService.getVehicle(player)
+	if not state or not vehicle or not hasLivingCharacter(state)
+		or vehicle:GetAttribute("OwnerUserId") ~= player.UserId then return false end
+	local chassis = vehicle.PrimaryPart
+	local seat = vehicle:FindFirstChild("DriverSeat")
+	if not chassis or not chassis:IsDescendantOf(vehicle)
+		or not seat or not seat:IsA("VehicleSeat")
+		or (seat.Occupant and seat.Occupant ~= state.humanoid) then return false end
+	local destination = checkpointCFrame or getSpawnCFrame(state.slot)
+	if not destination then return false end
+	return VehicleService.resetOnGround(vehicle, destination, player)
+end
+
 -- Idempotent entry point; it also handles players already present at startup.
 function PlayerVehicleService.start()
 	if started or not Config.PlayerVehiclesEnabled then return end

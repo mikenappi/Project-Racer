@@ -1,19 +1,48 @@
 --!strict
 
---[[
-    RespawnService
-
-    Responsible for authoritative vehicle reset and respawn behavior.
-
-    Future responsibilities may include:
-    - Handling reset requests
-    - Returning racers to valid track positions
-    - Preventing abusive reset behavior
-    - Restoring vehicle orientation
-]]
-
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Config = require(ReplicatedStorage:WaitForChild("shared"):WaitForChild("RaceConfig"))
+local CheckpointService = require(script.Parent:WaitForChild("CheckpointService"))
+local PlayerVehicleService = require(script.Parent:WaitForChild("PlayerVehicleService"))
 local RespawnService = {}
+local nextRequest: {[Player]: number} = {}
+local started = false
 
--- TODO: Implement vehicle reset and respawn logic.
+function RespawnService.requestReset(player: Player): boolean
+	if not CheckpointService.isRacer(player) then return false end
+	local now = os.clock()
+	if now < (nextRequest[player] or 0) then return false end
+	-- Rate-limit failed requests as well as successful ones.
+	nextRequest[player] = now + Config.ResetCooldown
+	local ok, result = pcall(PlayerVehicleService.resetVehicle, player, CheckpointService.getResetCFrame(player))
+	if not ok then warn("Vehicle reset failed: " .. tostring(result)) end
+	return ok and result == true
+end
+
+function RespawnService.start()
+	if started then return end
+	assert(Config.ResetCooldown > 0, "ResetCooldown must be positive.")
+	local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+	if not remotes then
+		remotes = Instance.new("Folder")
+		remotes.Name = "Remotes"
+		remotes.Parent = ReplicatedStorage
+	end
+	assert(remotes:IsA("Folder"), "Remotes must be a Folder.")
+	local remote = remotes:FindFirstChild(Config.ResetRemoteName)
+	if not remote then
+		remote = Instance.new("RemoteEvent")
+		remote.Name = Config.ResetRemoteName
+		remote.Parent = remotes
+	end
+	assert(remote:IsA("RemoteEvent"), "ResetVehicle must be a RemoteEvent.")
+	started = true
+	remote.OnServerEvent:Connect(function(player)
+		-- No client checkpoint, vehicle, or coordinates are accepted.
+		RespawnService.requestReset(player)
+	end)
+	Players.PlayerRemoving:Connect(function(player) nextRequest[player] = nil end)
+end
 
 return RespawnService

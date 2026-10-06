@@ -126,7 +126,7 @@ function VehicleService.spawn(spawnCFrame: CFrame, movementEnabled: boolean?): M
 end
 
 -- The marker must be above a clear, flat surface and rotated only around world Y.
-function VehicleService.spawnOnGround(markerCFrame: CFrame, movementEnabled: boolean?, owner: Player?): Model?
+local function groundDestination(vehicle: Model, markerCFrame: CFrame, owner: Player?, resetting: boolean?): CFrame?
 	assert(markerCFrame.UpVector:Dot(Vector3.yAxis) > 0.999, "Vehicle spawn markers must be upright.")
 	local params = RaycastParams.new()
 	params.RespectCanCollide = true
@@ -148,23 +148,63 @@ function VehicleService.spawnOnGround(markerCFrame: CFrame, movementEnabled: boo
 
 	-- Measure and spawn the same prepared copy so wheel overrides cannot clip
 	-- into the floor or evade the occupied-space check.
-	local vehicle = createVehicle()
 	local groundOffset = VehicleService.getGroundSupport(vehicle)
 	local position = ground.Position + Vector3.new(0, groundOffset + VehicleConfig.GroundClearance, 0)
 	local spawnCFrame = CFrame.new(position) * markerCFrame.Rotation
 	local overlapParams = OverlapParams.new()
 	overlapParams.RespectCanCollide = true
+	if resetting then
+		overlapParams.FilterType = Enum.RaycastFilterType.Exclude
+		local ignored: {Instance} = {vehicle}
+		local seat = vehicle:FindFirstChild("DriverSeat")
+		if owner and owner.Character and seat and seat:IsA("VehicleSeat")
+			and seat.Occupant and seat.Occupant.Parent == owner.Character then
+			table.insert(ignored, owner.Character)
+		end
+		overlapParams.FilterDescendantsInstances = ignored
+	end
 	for _, part in vehicle:GetDescendants() do
 		if part:IsA("BasePart") and part.CanCollide then
 			local partCFrame = spawnCFrame * vehicle:GetPivot():ToObjectSpace(part.CFrame)
 			if #Workspace:GetPartBoundsInBox(partCFrame, part.Size, overlapParams) > 0 then
-				vehicle:Destroy()
 				if not owner then warn("PlaceholderVehicle spawn is occupied. Move the marker or remove the previous vehicle.") end
 				return nil
 			end
 		end
 	end
+	return spawnCFrame
+end
+
+function VehicleService.spawnOnGround(markerCFrame: CFrame, movementEnabled: boolean?, owner: Player?): Model?
+	local vehicle = createVehicle()
+	local ok, spawnCFrame = pcall(groundDestination, vehicle, markerCFrame, owner)
+	if not ok then vehicle:Destroy(); error(spawnCFrame) end
+	if not spawnCFrame then vehicle:Destroy(); return nil end
 	return placeVehicle(vehicle, spawnCFrame, movementEnabled, owner)
+end
+
+function VehicleService.resetOnGround(vehicle: Model, markerCFrame: CFrame, owner: Player): boolean
+	local destination = groundDestination(vehicle, markerCFrame, owner, true)
+	if not destination then return false end
+	local chassis = vehicle.PrimaryPart
+	if not chassis or not chassis:CanSetNetworkOwnership() then return false end
+	local seat = vehicle:FindFirstChild("DriverSeat")
+	local character = owner.Character
+	local rider = if seat and seat:IsA("VehicleSeat") and seat.Occupant
+		and character and seat.Occupant.Parent == character then character else nil
+	local riderFrame = if rider then destination * vehicle:GetPivot():ToObjectSpace(rider:GetPivot()) else nil
+	-- A version lets PreSimulation clear controller memory even with deferred signals.
+	vehicle:PivotTo(destination)
+	if rider and riderFrame then rider:PivotTo(riderFrame) end
+	for _, part in vehicle:GetDescendants() do
+		if part:IsA("BasePart") then
+			part.AssemblyLinearVelocity = Vector3.zero
+			part.AssemblyAngularVelocity = Vector3.zero
+		end
+	end
+	chassis:SetNetworkOwner(nil)
+	vehicle:SetAttribute("ResetVersion", (vehicle:GetAttribute("ResetVersion") or 0) + 1)
+	return true
 end
 
 return VehicleService
