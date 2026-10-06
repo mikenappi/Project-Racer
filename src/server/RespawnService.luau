@@ -10,14 +10,22 @@ local nextRequest: {[Player]: number} = {}
 local started = false
 
 function RespawnService.requestReset(player: Player): boolean
-	if not CheckpointService.isRacer(player) then return false end
+	if not CheckpointService.isRacer(player) then
+		player:SetAttribute("ResetStatus", "Race unavailable: check checkpoint setup")
+		return false
+	end
 	local now = os.clock()
-	if now < (nextRequest[player] or 0) then return false end
+	if now < (nextRequest[player] or 0) then
+		player:SetAttribute("ResetStatus", "Wait a moment before resetting again")
+		return false
+	end
 	-- Rate-limit failed requests as well as successful ones.
 	nextRequest[player] = now + Config.ResetCooldown
 	local ok, result = pcall(PlayerVehicleService.resetVehicle, player, CheckpointService.getResetCFrame(player))
 	if not ok then warn("Vehicle reset failed: " .. tostring(result)) end
-	return ok and result == true
+	local success = ok and result == true
+	player:SetAttribute("ResetStatus", if success then "Returned to checkpoint" else "Reset blocked: check your vehicle, ground and free space")
+	return success
 end
 
 function RespawnService.start()

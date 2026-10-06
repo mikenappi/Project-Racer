@@ -24,6 +24,12 @@ type PlayerState = {
 local states: {[Player]: PlayerState} = {}
 local slots: {[number]: Player} = {}
 local started = false
+local recoveryDestination: ((Player) -> CFrame?)? = nil
+
+-- Inject the race-owned lookup without creating a circular module dependency.
+function PlayerVehicleService.setRecoveryDestination(provider: (Player) -> CFrame?)
+	recoveryDestination = provider
+end
 
 local function removeVehicle(state: PlayerState)
 	local vehicle = state.vehicle
@@ -72,9 +78,12 @@ local function trySpawn(state: PlayerState)
 	state.nextAttempt = os.clock() + Config.SpawnRetryInterval
 	-- Asset errors should affect only this attempt, not stop every player's recovery.
 	local success, result = pcall(function(): Model?
-		local marker = getSpawnCFrame(state.slot)
+		local checkpoint = if recoveryDestination then recoveryDestination(state.player) else nil
+		local marker = checkpoint or getSpawnCFrame(state.slot)
 		if not marker then return nil end
-		return VehicleService.spawnOnGround(marker, true, state.player)
+		-- CharacterAdded can precede the root part. Wait before placing a recovered racer.
+		if checkpoint and (not state.character or not state.character:FindFirstChild("HumanoidRootPart")) then return nil end
+		return VehicleService.spawnOnGround(marker, true, state.player, checkpoint ~= nil)
 	end)
 	if success and result then
 		local vehicle = result :: Model
@@ -158,6 +167,7 @@ function PlayerVehicleService.resetVehicle(player: Player, checkpointCFrame: CFr
 	if not chassis or not chassis:IsDescendantOf(vehicle)
 		or not seat or not seat:IsA("VehicleSeat")
 		or (seat.Occupant and seat.Occupant ~= state.humanoid) then return false end
+	if state.humanoid and state.humanoid.SeatPart and state.humanoid.SeatPart ~= seat then return false end
 	local destination = checkpointCFrame or getSpawnCFrame(state.slot)
 	if not destination then return false end
 	return VehicleService.resetOnGround(vehicle, destination, player)

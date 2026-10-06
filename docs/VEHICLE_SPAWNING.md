@@ -125,6 +125,7 @@ death, stale callbacks, stable rotated slots, missing/blocked spawns, retries,
 asset errors, lost cars/chassis/seats, leave cleanup, and slot reuse.
 
 Checkpoint progression and R-key resets are described in [CHECKPOINTS.md](CHECKPOINTS.md).
-Manual resets retain the active vehicle and spawn slot; death/fall recovery above
-continues to spawn in the original slot. Earned progress survives replacement
-until the next race, so a subsequent manual reset returns to that checkpoint.
+Manual resets retain the active vehicle and spawn slot. With an earned checkpoint,
+death/fall recovery creates the replacement at the saved checkpoint and seats the
+owner. Before checkpoint 1 it retains the original spawn-slot behavior. Progress
+survives replacement until the next race; blocked checkpoints retry in place.

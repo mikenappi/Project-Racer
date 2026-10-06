@@ -5,6 +5,7 @@ local CheckpointService = require(script.Parent:WaitForChild("CheckpointService"
 local PlayerVehicleService = require(script.Parent:WaitForChild("PlayerVehicleService"))
 local RespawnService = require(script.Parent:WaitForChild("RespawnService"))
 
+PlayerVehicleService.setRecoveryDestination(CheckpointService.getResetCFrame)
 PlayerVehicleService.start() -- Shared idempotent lifecycle, regardless of script startup order.
 RespawnService.start()
 Players.PlayerAdded:Connect(CheckpointService.addRacer)

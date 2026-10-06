@@ -6,6 +6,7 @@ local VehicleConfig = {
 	ActiveFolderName = "Vehicles",
 	TestSpawnName = "PlaceholderVehicleSpawn",
 	GroundClearance = 0.25,
+	ResetSeatHeight = 3, -- Place an unseated owner above DriverSeat before seating.
 	GroundProbeDistance = 256,
 	TestWheelDiameter = 2.8,
 	TestWheelWidth = 1.6,
