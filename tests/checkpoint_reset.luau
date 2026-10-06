@@ -43,6 +43,7 @@ for i=1,3 do
 	checkpoints.children[part.Name] = part
 	markers[i] = part
 end
+function vehicleService.getResetMarkerCFrame(cf) return cf end
 local cp = loadSource(__CHECKPOINT_SOURCE__, "CheckpointService")
 parent.children.CheckpointService = cp
 local respawn = loadSource(__RESPAWN_SOURCE__, "RespawnService")
@@ -132,7 +133,12 @@ assert(cp.getLastIndex(first)==2)
 -- Death/replacement preserves progress, but reset targets the new owned model.
 human.Died:Fire()
 characterFor(first)
+assert(service.getVehicle(first)==nil, "checkpoint respawn waits for character root")
+first.Character.children.HumanoidRootPart = instance("Part", "HumanoidRootPart")
+tick(1)
 firstCar = assert(service.getVehicle(first))
+near(firstCar.frame.x,200)
+assert(cp.getLastIndex(first)==2 and first:GetAttribute("CheckpointCount")==3)
 now += 2
 assert(respawn.requestReset(first) and resetDestination.x==200)
 local third = player(303)
@@ -158,7 +164,7 @@ environment.RaycastParams = {new=function() return {} end}
 environment.OverlapParams = {new=function() return {} end}
 environment.Enum = {RaycastFilterType={Exclude="Exclude"}}
 services.ServerStorage = instance("ServerStorage", "ServerStorage")
-Config.GroundProbeDistance, Config.GroundClearance = 256, 0.25
+Config.GroundProbeDistance, Config.GroundClearance, Config.ResetSeatHeight = 256, 0.25, 3
 environment.script = {Parent=parent}
 local physical = loadSource(__VEHICLE_SOURCE__, "VehicleService")
 -- Geometry support is covered by the pre-existing Studio stationary checks.
@@ -168,11 +174,25 @@ car.frame = frame(0, 5, 0)
 function car:GetPivot() return self.frame end
 function car:PivotTo(value) self.frame=value end
 local chassis = car.PrimaryPart
+local ownerCharacter = first.Character
+ownerCharacter.frame = frame(900,8,900)
+ownerCharacter.GetPivot, ownerCharacter.PivotTo = car.GetPivot, car.PivotTo
+function ownerCharacter:GetDescendants() return {self.children.HumanoidRootPart} end
+local seat = car.children.DriverSeat
+seat.CFrame = frame(100,3,20)
+function seat:Sit(humanoid) self.Occupant = humanoid; humanoid.SeatPart = self end
 chassis.CanCollide, chassis.CFrame, chassis.Size = true, car.frame, vector(4,2,8)
 function car:GetDescendants() return {chassis} end
 function chassis:CanSetNetworkOwnership() return true end
 function chassis:SetNetworkOwner(value) assert(value==nil); self.serverOwned=true end
 local noGround = false
+local broadPhaseOnly = false
+local lastProbe
+function Workspace:GetPartsInPart(probe, params)
+	lastProbe = probe
+	assert(probe.Parent==Workspace and not probe.CanCollide and not probe.CanTouch)
+	return if blocked then {secondCar} else {}
+end
 function Workspace:Raycast(position, direction, params)
 	assert(params.RespectCanCollide and params.FilterDescendantsInstances[1]==folder)
 	if noGround then return nil end
@@ -180,12 +200,21 @@ function Workspace:Raycast(position, direction, params)
 end
 function Workspace:GetPartBoundsInBox(cf, size, params)
 	assert(params.FilterDescendantsInstances[1]==car)
-	return if blocked then {secondCar} else {}
+	return if blocked or broadPhaseOnly then {secondCar} else {}
 end
+local lowMarker = assert(physical.getResetMarkerCFrame(frame(100,31,20)))
+near(lowMarker.y, 0.25)
 assert(physical.resetOnGround(car, frame(100,8,20,math.pi/2), first))
 near(car.frame.x,100); near(car.frame.y,2.25); near(car.frame.angle,math.pi/2)
+assert(seat.Occupant==ownerCharacter.children.Humanoid, "on-foot reset must seat owner")
+near(ownerCharacter.frame.x,100)
+assert(ownerCharacter.children.HumanoidRootPart.AssemblyLinearVelocity==environment.Vector3.zero)
 assert(chassis.AssemblyLinearVelocity==environment.Vector3.zero and chassis.AssemblyAngularVelocity==environment.Vector3.zero)
 assert(chassis.serverOwned and car:GetAttribute("ResetVersion")==1)
+broadPhaseOnly = true
+assert(physical.resetOnGround(car, frame(100,8,20,math.pi/2), first), "hollow mesh bounds must not block")
+assert(lastProbe.destroyed, "clearance probe leaked")
+broadPhaseOnly = false
 local savedFrame = car.frame
 blocked = true
 assert(not physical.resetOnGround(car, frame(200,8,20), first) and car.frame==savedFrame)
@@ -198,7 +227,7 @@ first.Character.frame = car.frame * frame(0,3,0)
 first.Character.GetPivot, first.Character.PivotTo = car.GetPivot, car.PivotTo
 assert(physical.resetOnGround(car, frame(200,8,20), first))
 near(first.Character.frame.x, 200); near(first.Character.frame.y,5.25)
-assert(service.getVehicle(first)==car and car:GetAttribute("ResetVersion")==2)
+assert(service.getVehicle(first)==car and car:GetAttribute("ResetVersion")==3)
 print("PASS: actual ground reset, upright heading, zero velocity, server ownership, occupied/missing ground, seated rider")
 
 -- The shared placement refactor must still create and clean up spawn copies.
@@ -247,7 +276,7 @@ local resetStep = loadSource(__CONTROLLER_RESET_SOURCE__, "Controller.resetPrelu
 local drive = {vehicle=car, resetVersion=0, throttle=1, steer=1, lastInput=now, yawRate=3, driveForce=5, driveMode="Drive"}
 resetStep(drive)
 assert(drive.throttle==0 and drive.steer==0 and drive.lastInput==-math.huge and drive.yawRate==0)
-assert(drive.driveForce==0 and drive.driveMode=="Hold" and drive.resetVersion==2)
+assert(drive.driveForce==0 and drive.driveMode=="Hold" and drive.resetVersion==3)
 print("PASS: controller clears cached input/steering after reset")
 
 -- Execute client input binding; requests contain no authority-bearing payload.

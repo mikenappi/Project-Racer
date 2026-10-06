@@ -125,9 +125,7 @@ function VehicleService.spawn(spawnCFrame: CFrame, movementEnabled: boolean?): M
 	return placeVehicle(createVehicle(), spawnCFrame, movementEnabled)
 end
 
--- The marker must be above a clear, flat surface and rotated only around world Y.
-local function groundDestination(vehicle: Model, markerCFrame: CFrame, owner: Player?, resetting: boolean?): CFrame?
-	assert(markerCFrame.UpVector:Dot(Vector3.yAxis) > 0.999, "Vehicle spawn markers must be upright.")
+local function findGround(markerCFrame: CFrame): RaycastResult?
 	local params = RaycastParams.new()
 	params.RespectCanCollide = true
 	local excluded: {Instance} = {getActiveFolder()}
@@ -141,7 +139,42 @@ local function groundDestination(vehicle: Model, markerCFrame: CFrame, owner: Pl
 		Vector3.new(0, -VehicleConfig.GroundProbeDistance, 0),
 		params
 	)
-	if not ground or ground.Normal:Dot(Vector3.yAxis) < 0.99 then
+	return if ground and ground.Normal:Dot(Vector3.yAxis) >= 0.99 then ground else nil
+end
+
+-- Snapshot the track surface at race start. Later resets probe just above that
+-- surface, so a newly parked vehicle or crate cannot become a raised spawn floor.
+function VehicleService.getResetMarkerCFrame(markerCFrame: CFrame): CFrame?
+	local ground = findGround(markerCFrame)
+	if not ground then return nil end
+	return CFrame.new(ground.Position + Vector3.new(0, VehicleConfig.GroundClearance, 0)) * markerCFrame.Rotation
+end
+
+local function isOccupied(partCFrame: CFrame, size: Vector3, params: OverlapParams): boolean
+	if #Workspace:GetPartBoundsInBox(partCFrame, size, params) == 0 then return false end
+	-- Large hollow meshes (such as the track's mountain) can cover the road in
+	-- bounding-box queries while their actual collision geometry leaves it clear.
+	local probe = Instance.new("Part")
+	probe.Name = "VehicleClearanceProbe"
+	probe.Anchored = true
+	probe.CanCollide = false
+	probe.CanTouch = false
+	probe.CanQuery = false
+	probe.Transparency = 1
+	probe.Size = size
+	probe.CFrame = partCFrame
+	probe.Parent = Workspace
+	local ok, parts = pcall(function() return Workspace:GetPartsInPart(probe, params) end)
+	probe:Destroy()
+	if not ok then error(parts) end
+	return #parts > 0
+end
+
+-- The marker must be above a clear, flat surface and rotated only around world Y.
+local function groundDestination(vehicle: Model, markerCFrame: CFrame, owner: Player?, resetting: boolean?): CFrame?
+	assert(markerCFrame.UpVector:Dot(Vector3.yAxis) > 0.999, "Vehicle spawn markers must be upright.")
+	local ground = findGround(markerCFrame)
+	if not ground then
 		if not owner then warn("PlaceholderVehicle needs a flat, collidable surface below the spawn marker.") end
 		return nil
 	end
@@ -156,9 +189,8 @@ local function groundDestination(vehicle: Model, markerCFrame: CFrame, owner: Pl
 	if resetting then
 		overlapParams.FilterType = Enum.RaycastFilterType.Exclude
 		local ignored: {Instance} = {vehicle}
-		local seat = vehicle:FindFirstChild("DriverSeat")
-		if owner and owner.Character and seat and seat:IsA("VehicleSeat")
-			and seat.Occupant and seat.Occupant.Parent == owner.Character then
+		-- The owner moves with the car, including when currently on foot.
+		if owner and owner.Character then
 			table.insert(ignored, owner.Character)
 		end
 		overlapParams.FilterDescendantsInstances = ignored
@@ -166,7 +198,7 @@ local function groundDestination(vehicle: Model, markerCFrame: CFrame, owner: Pl
 	for _, part in vehicle:GetDescendants() do
 		if part:IsA("BasePart") and part.CanCollide then
 			local partCFrame = spawnCFrame * vehicle:GetPivot():ToObjectSpace(part.CFrame)
-			if #Workspace:GetPartBoundsInBox(partCFrame, part.Size, overlapParams) > 0 then
+			if isOccupied(partCFrame, part.Size, overlapParams) then
 				if not owner then warn("PlaceholderVehicle spawn is occupied. Move the marker or remove the previous vehicle.") end
 				return nil
 			end
@@ -175,21 +207,44 @@ local function groundDestination(vehicle: Model, markerCFrame: CFrame, owner: Pl
 	return spawnCFrame
 end
 
-function VehicleService.spawnOnGround(markerCFrame: CFrame, movementEnabled: boolean?, owner: Player?): Model?
+local function seatOwner(vehicle: Model, owner: Player)
+	local character = owner.Character
+	local humanoid = if character then character:FindFirstChildOfClass("Humanoid") else nil
+	local seat = vehicle:FindFirstChild("DriverSeat")
+	if not character or not humanoid or humanoid.Health <= 0
+		or not seat or not seat:IsA("VehicleSeat") then return end
+	if seat.Occupant ~= humanoid then
+		character:PivotTo(seat.CFrame * CFrame.new(0, VehicleConfig.ResetSeatHeight, 0))
+		seat:Sit(humanoid)
+	end
+	for _, part in character:GetDescendants() do
+		if part:IsA("BasePart") then
+			part.AssemblyLinearVelocity = Vector3.zero
+			part.AssemblyAngularVelocity = Vector3.zero
+		end
+	end
+end
+
+function VehicleService.spawnOnGround(markerCFrame: CFrame, movementEnabled: boolean?, owner: Player?, recoverOwner: boolean?): Model?
 	local vehicle = createVehicle()
-	local ok, spawnCFrame = pcall(groundDestination, vehicle, markerCFrame, owner)
+	local ok, spawnCFrame = pcall(groundDestination, vehicle, markerCFrame, owner, recoverOwner)
 	if not ok then vehicle:Destroy(); error(spawnCFrame) end
 	if not spawnCFrame then vehicle:Destroy(); return nil end
-	return placeVehicle(vehicle, spawnCFrame, movementEnabled, owner)
+	local placed = placeVehicle(vehicle, spawnCFrame, movementEnabled, owner)
+	if recoverOwner and owner then seatOwner(placed, owner) end
+	return placed
 end
 
 function VehicleService.resetOnGround(vehicle: Model, markerCFrame: CFrame, owner: Player): boolean
+	local character = owner.Character
+	local humanoid = if character then character:FindFirstChildOfClass("Humanoid") else nil
+	if not character or not character:FindFirstChild("HumanoidRootPart")
+		or not humanoid or humanoid.Health <= 0 then return false end
 	local destination = groundDestination(vehicle, markerCFrame, owner, true)
 	if not destination then return false end
 	local chassis = vehicle.PrimaryPart
 	if not chassis or not chassis:CanSetNetworkOwnership() then return false end
 	local seat = vehicle:FindFirstChild("DriverSeat")
-	local character = owner.Character
 	local rider = if seat and seat:IsA("VehicleSeat") and seat.Occupant
 		and character and seat.Occupant.Parent == character then character else nil
 	local riderFrame = if rider then destination * vehicle:GetPivot():ToObjectSpace(rider:GetPivot()) else nil
@@ -202,6 +257,7 @@ function VehicleService.resetOnGround(vehicle: Model, markerCFrame: CFrame, owne
 			part.AssemblyAngularVelocity = Vector3.zero
 		end
 	end
+	seatOwner(vehicle, owner)
 	chassis:SetNetworkOwner(nil)
 	vehicle:SetAttribute("ResetVersion", (vehicle:GetAttribute("ResetVersion") or 0) + 1)
 	return true

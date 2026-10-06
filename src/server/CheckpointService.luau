@@ -4,23 +4,27 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 local Config = require(ReplicatedStorage:WaitForChild("shared"):WaitForChild("RaceConfig"))
 local PlayerVehicleService = require(script.Parent:WaitForChild("PlayerVehicleService"))
+local VehicleService = require(script.Parent:WaitForChild("VehicleService"))
 local CheckpointService = {}
 
 type Progress = {lastIndex: number, resetCFrame: CFrame?}
 local progress: {[Player]: Progress} = {}
 local connections: {RBXScriptConnection} = {}
 local active = false
+local checkpointCount = 0
 
 function CheckpointService.addRacer(player: Player)
 	if active and not progress[player] then
 		progress[player] = {lastIndex = 0, resetCFrame = nil}
 		player:SetAttribute("LastCheckpoint", 0)
+		player:SetAttribute("CheckpointCount", checkpointCount)
 	end
 end
 
 function CheckpointService.removeRacer(player: Player)
 	progress[player] = nil
 	player:SetAttribute("LastCheckpoint", nil)
+	player:SetAttribute("CheckpointCount", nil)
 end
 
 function CheckpointService.isRacer(player: Player): boolean
@@ -63,6 +67,7 @@ function CheckpointService.startRace(racers: {Player}): (boolean, string?)
 	local folder = Workspace:FindFirstChild(Config.CheckpointFolderName)
 	if not folder or not folder:IsA("Folder") then return false, "Create Workspace.Checkpoints (Folder)." end
 	local markers: {[number]: BasePart} = {}
+	local resetFrames: {[number]: CFrame} = {}
 	local count = 0
 	for _, child in folder:GetChildren() do
 		local index = tonumber(child.Name)
@@ -70,9 +75,12 @@ function CheckpointService.startRace(racers: {Player}): (boolean, string?)
 			or tostring(index) ~= child.Name or markers[index]
 			or not child.Anchored or not child.CanTouch or child.CanCollide or child.CanQuery
 			or child.CFrame.UpVector:Dot(Vector3.yAxis) < 0.999 then
-			return false, "Checkpoints must be upright, anchored, touchable, noncollidable, nonqueryable parts named 1, 2, 3, ..."
+			return false, "Invalid checkpoint " .. child.Name .. ": use an upright, anchored, touchable, noncollidable, nonqueryable part named 1, 2, 3, ..."
 		end
+		local resetFrame = VehicleService.getResetMarkerCFrame(child.CFrame)
+		if not resetFrame then return false, "Checkpoint " .. child.Name .. " needs flat ground below its center." end
 		markers[index] = child
+		resetFrames[index] = resetFrame
 		count += 1
 	end
 	if count == 0 then return false, "At least one checkpoint is required." end
@@ -84,10 +92,11 @@ function CheckpointService.startRace(racers: {Player}): (boolean, string?)
 	for player in progress do player:SetAttribute("LastCheckpoint", nil) end
 	table.clear(progress)
 	active = true
+	checkpointCount = count
 	for _, player in racers do CheckpointService.addRacer(player) end
 	for index = 1, count do
 		local marker = markers[index]
-		local resetCFrame = marker.CFrame
+		local resetCFrame = resetFrames[index]
 		table.insert(connections, marker.Touched:Connect(function(hit)
 			if marker.Parent == folder and folder.Parent == Workspace then touched(index, resetCFrame, hit) end
 		end))
