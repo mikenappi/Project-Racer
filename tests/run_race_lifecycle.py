@@ -17,9 +17,10 @@ controller = read('src/server/VehicleController.server.luau')
 step = controller.split('local function stepVehicle(state: DriveState, dt: number)', 1)[1].split('\n\tlocal normal = getGroundNormal(state)', 1)[0]
 remote = controller.split('inputRemote.OnServerEvent:Connect(function', 1)[1].split('\nend)', 1)[0]
 sources = {
+    'TRACK': read('src/server/TrackProgress.luau'),
     'PLACEMENT': read('src/server/PlacementService.luau'),
     'TIMING': read('src/shared/RaceTiming.luau'),
-    'COUNTDOWN_UI': 'return function()' + read('src/client/RaceHUD.local.luau').split('local function showCountdown()', 1)[1].split('RunService.Heartbeat:Connect(showCountdown)', 1)[0],
+    'COUNTDOWN_UI': 'return function()' + read('src/client/RaceHUD.local.luau').split('local function showCountdown()', 1)[1].split('-- COUNTDOWN_END:', 1)[0],
     'COAST': 'local function getDriveTarget' + controller.split('local function getDriveTarget', 1)[1].split('local function getYawTarget', 1)[0]
         + '\nreturn function(state, speed, hasInput, coasting, dt)\n'
         + '\tlocal throttle = if hasInput' + controller.split('\tlocal throttle = if hasInput', 1)[1].split('\n\t-- The plane', 1)[0]

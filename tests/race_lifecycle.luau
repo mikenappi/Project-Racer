@@ -5,6 +5,11 @@ raceConfig.WaitingDuration, raceConfig.LoadingTimeout = 5, 30
 raceConfig.LoadingRetryInterval, raceConfig.CountdownDuration = 1, 3
 raceConfig.RaceTimeout, raceConfig.ResultsDuration = 300, 5
 raceConfig.TotalLaps = 2
+raceConfig.PlacementInterval = 0.1
+raceConfig.ProgressFolderName = "RaceProgressPaths"
+raceConfig.ProgressMaxSpeed, raceConfig.ProgressMaxSampleGap = 1200, 0.5
+raceConfig.ProgressEntryDistance, raceConfig.ProgressSlack, raceConfig.ProgressArcRatio = 24, 2, 1.5
+parent.children.TrackProgress = loadSource(__TRACK_SOURCE__, "TrackProgress")
 local gateSubscriptions = {}
 for _, marker in markers do
 	local connect = marker.Touched.Connect
@@ -521,3 +526,42 @@ assert(simultaneous.finishResults["101"].elapsedTime == simultaneous.finishResul
 assert(not race.markFinished(first, simultaneous.raceId) and not race.markFinished(second, simultaneous.raceId))
 assert(#race.getSnapshot().finishOrder == 2)
 print("PASS: immutable atomic finish records, recovery/replacement protection, non-final/early rejection, simultaneous unique stable order")
+
+-- Real RaceService + projection + ranking, with an authored test route replacing
+-- only Studio asset loading. No progression/ranking implementation is mocked.
+tick(5); expect("Waiting")
+local track = parent.children.TrackProgress
+local route = assert(track.build({point(0,0,0),point(100,0,0)},2))
+track.load = function() return {[0]=route,[1]=route,[2]=route,[3]=route}, "Continuous" end
+startRequest(); tick(); tick(3); expect("Racing")
+firstCar, secondCar = seat(first), seat(second)
+firstCar.PrimaryPart.Position, secondCar.PrimaryPart.Position = point(0,0,0), point(0,0,0)
+tick(0.11)
+firstCar.PrimaryPart.Position, secondCar.PrimaryPart.Position = point(8,0,0), point(6,0,0)
+tick(0.11); places(1,2)
+firstCar.PrimaryPart.Position, secondCar.PrimaryPart.Position = point(12,0,0), point(15,0,0)
+tick(0.11); places(2,1)
+assert(cp.getLastIndex(first)==0 and cp.getLastIndex(second)==0)
+local messages = #clientUpdates[1]
+tick(0.11); tick(0.11)
+assert(#clientUpdates[1]==messages,"unchanged ranks must not send frame traffic")
+firstCar:SetAttribute("ResetVersion",(firstCar:GetAttribute("ResetVersion") or 0)+1)
+firstCar.PrimaryPart.Position=point(0,0,0)
+tick(0.11); places(2,1)
+secondCar:SetAttribute("ResetVersion",(secondCar:GetAttribute("ResetVersion") or 0)+1)
+secondCar.PrimaryPart.Position=point(90,0,0)
+tick(0.11); places(1,2)
+assert(cp.getLastIndex(second)==0,"teleport cannot award a checkpoint")
+secondCar.PrimaryPart.Position=point(0,0,0)
+tick(0.11)
+secondCar.PrimaryPart.Position=point(6,0,0)
+tick(0.11); places(2,1)
+leave(second); tick(0.11)
+assert(race.getSnapshot().positions["101"]==1 and race.getSnapshot().positions["202"]==nil)
+tick(300); expect("Results"); tick(5); expect("Waiting")
+assert(next(race.getSnapshot().positions)==nil)
+startRequest(); tick(); tick(3); expect("Racing")
+firstCar.PrimaryPart.Position=point(0,0,0)
+tick(0.11)
+assert(cp.getLastIndex(first)==0 and race.getSnapshot().positions["101"]==1)
+print("PASS: integrated continuous overtakes, changed-only replication, reset/teleport invalidation, departure and restart")

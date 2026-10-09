@@ -10,12 +10,13 @@ local PlayerVehicleService = require(script.Parent:WaitForChild("PlayerVehicleSe
 local RespawnService = require(script.Parent:WaitForChild("RespawnService"))
 local RaceTiming = require(ReplicatedStorage:WaitForChild("shared"):WaitForChild("RaceTiming"))
 local PlacementService = require(script.Parent:WaitForChild("PlacementService"))
+local TrackProgress = require(script.Parent:WaitForChild("TrackProgress"))
 local RaceService = {}
 
 export type State = "Waiting" | "Loading" | "Countdown" | "Racing" | "Results"
 export type FinishResult = {raceId: number, userId: number, finished: boolean, position: number, elapsedTime: number}
 export type Snapshot = {state: State, raceId: number, deadline: number, reason: string, countdown: number, startedAt: number, endedAt: number, finishTimes: {[string]: number}, finishOrder: {number}, positions: {[string]: number}, finishResults: {[string]: FinishResult}}
-type Participant = {finished: boolean, gridVehicle: Model?, gridFrame: CFrame?}
+type Participant = {finished: boolean, gridVehicle: Model?, gridFrame: CFrame?, sample: TrackProgress.Sample?, stage: number?, lap: number?, sampledVehicle: Model?, resetVersion: any, distance: number?}
 type Hook = (Snapshot) -> (() -> ())?
 local state: State = "Waiting"
 local raceId, deadline = 0, 0
@@ -35,6 +36,38 @@ local cleanups: {() -> ()} = {}
 local display: StringValue? = nil
 local trackReady = false
 local nextAttempt, nextGridAttempt = 0, 0
+local nextPlacement = 0
+local progressPaths: {[number]: TrackProgress.Path}? = nil
+local projectionOptions = {MaxSpeed=Config.ProgressMaxSpeed, MaxSampleGap=Config.ProgressMaxSampleGap,
+	EntryDistance=Config.ProgressEntryDistance, Slack=Config.ProgressSlack, ArcRatio=Config.ProgressArcRatio}
+
+local function samplePositions(now: number)
+	local paths = progressPaths
+	if not paths then return end
+	for player, participant in participants do
+		if participant.finished then continue end
+		local progress = CheckpointService.getRaceProgress(player)
+		local stage = CheckpointService.getLastIndex(player) or 0
+		local vehicle = PlayerVehicleService.getVehicle(player)
+		local chassis = if vehicle then vehicle.PrimaryPart else nil
+		local resetVersion = if vehicle then vehicle:GetAttribute("ResetVersion") else nil
+		local lap = if progress then progress.completedLaps else 0
+		if participant.stage ~= stage or participant.lap ~= lap or participant.sampledVehicle ~= vehicle
+			or participant.resetVersion ~= resetVersion then
+			participant.sample = nil
+		end
+		participant.stage, participant.lap = stage, lap
+		participant.sampledVehicle, participant.resetVersion = vehicle, resetVersion
+		participant.distance = 0
+		local path = paths[stage]
+		if path and progress and vehicle and chassis and vehicle:IsDescendantOf(Workspace)
+			and vehicle:GetAttribute("OwnerUserId") == player.UserId then
+			participant.sample, participant.distance = TrackProgress.sample(path, participant.sample, chassis.Position, now, projectionOptions)
+		else
+			participant.sample = nil
+		end
+	end
+end
 local durations: {[State]: number} = {}
 
 function RaceService.getSnapshot(): Snapshot
@@ -99,9 +132,14 @@ local function refreshPositions(): boolean
 	for player, participant in participants do
 		if participant.finished then continue end
 		local progress = CheckpointService.getRaceProgress(player)
+		local checkpoint = CheckpointService.getLastIndex(player) or 0
+		local vehicle = PlayerVehicleService.getVehicle(player)
+		local currentSample = participant.stage == checkpoint and progress ~= nil and participant.lap == progress.completedLaps
+			and participant.sampledVehicle == vehicle and vehicle ~= nil
+			and participant.resetVersion == vehicle:GetAttribute("ResetVersion")
 		table.insert(active, {userId = player.UserId,
 			completedLaps = if progress then progress.completedLaps else 0,
-			checkpoint = CheckpointService.getLastIndex(player) or 0})
+			checkpoint = checkpoint, distance = if currentSample then participant.distance or 0 else 0})
 	end
 	local nextPositions = PlacementService.getPositions(active, finishOrder)
 	local changed = false
@@ -183,8 +221,11 @@ local function transition(target: State, why: string): boolean
 		CheckpointService.stopRace()
 		for player in participants do removeParticipant(player) end
 		trackReady = false
+		progressPaths = nil
 	elseif target == "Loading" then
 		table.clear(coasting)
+		progressPaths = nil
+		nextPlacement = 0
 		raceId += 1
 		CheckpointService.stopRace()
 		for _, player in Players:GetPlayers() do
@@ -261,6 +302,12 @@ local function update()
 			for player in participants do table.insert(racers, player) end
 			local ok, success, failure = pcall(CheckpointService.startRace, racers)
 			trackReady = ok and success == true
+			if trackReady then
+				local detail
+				progressPaths, detail = TrackProgress.load(Workspace, Config)
+				if display then display:SetAttribute("PlacementMode", if progressPaths then "Continuous" else "Checkpoint fallback") end
+				if not progressPaths then warn("Continuous placement unavailable: " .. detail) end
+			end
 			if not trackReady then
 				reason = "Track unavailable: " .. tostring(if ok then failure else success)
 				publish()
@@ -333,6 +380,10 @@ local function update()
 			RaceService.markFinished(player, raceId)
 			if not participants[player].finished then unfinished += 1 end
 		end
+		if now >= nextPlacement then
+			nextPlacement = now + Config.PlacementInterval
+			samplePositions(now)
+		end
 		if refreshPositions() then publish() end
 		if unfinished == 0 then transition("Results", "All participants finished or left")
 		elseif now >= deadline then transition("Results", "Race timed out; unfinished racers DNF") end
@@ -343,7 +394,7 @@ end
 
 function RaceService.start()
 	if started then return end
-	for _, key in {"MinimumPlayers", "LoadingTimeout", "LoadingRetryInterval", "CountdownDuration", "RaceTimeout", "ResultsDuration"} do
+	for _, key in {"MinimumPlayers", "LoadingTimeout", "LoadingRetryInterval", "CountdownDuration", "RaceTimeout", "ResultsDuration", "PlacementInterval", "ProgressMaxSpeed", "ProgressMaxSampleGap", "ProgressEntryDistance", "ProgressSlack", "ProgressArcRatio"} do
 		local value = (Config :: any)[key]
 		assert(typeof(value) == "number" and value > 0 and value < math.huge, key .. " must be finite and positive")
 	end

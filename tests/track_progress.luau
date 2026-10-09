@@ -1,0 +1,66 @@
+local TrackProgress = require("../src/server/TrackProgress")
+local Placement = require("../src/server/PlacementService")
+local Format = require("../src/shared/RaceHUDFormat")
+local function point(x,y,z) return {X=x,Y=y or 0,Z=z or 0} end
+local options = {MaxSpeed=100,MaxSampleGap=0.5,EntryDistance=10,Slack=0.2,ArcRatio=1.5}
+local path = assert(TrackProgress.build({point(0),point(30),point(30,0,30),point(60,20,30)},2))
+local a, b, ad, bd
+a, ad = TrackProgress.sample(path,nil,point(0),0,options)
+b, bd = TrackProgress.sample(path,nil,point(0),0,options)
+a, ad = TrackProgress.sample(path,a,point(8),0.1,options)
+b, bd = TrackProgress.sample(path,b,point(6),0.1,options)
+local function rank()
+	return Placement.getPositions({{userId=101,completedLaps=0,checkpoint=1,distance=ad},
+		{userId=202,completedLaps=0,checkpoint=1,distance=bd}}, {})
+end
+assert(rank()["101"]==1)
+a, ad = TrackProgress.sample(path,a,point(12),0.2,options)
+b, bd = TrackProgress.sample(path,b,point(15),0.2,options)
+assert(rank()["202"]==1, "overtake must change rank without checkpoint change")
+print("PASS: same-checkpoint overtake changes rank with independent samples")
+local sample, d = TrackProgress.sample(path,nil,point(0),0,options)
+local now=0
+for _, p in {point(10),point(20),point(30),point(30,0,10),point(30,0,20),point(30,0,30),point(36,4,30)} do
+	now+=0.1
+	sample,d=TrackProgress.sample(path,sample,p,now,options)
+	assert(d>0)
+end
+assert(math.abs(d-(60+math.sqrt(52)))<0.001, "arc length must include curve and elevation")
+sample,d=TrackProgress.sample(path,sample,point(30,0,30),now+0.1,options)
+assert(d==60, "backward travel reduces distance")
+local _,cut=TrackProgress.sample(path,sample,point(50,0,0),now+0.2,options)
+assert(cut==0, "shortcut/teleport cannot grant progress")
+local _,fall=TrackProgress.sample(path,sample,point(30,-100,30),now+0.2,options)
+assert(fall==0)
+local _,reset=TrackProgress.sample(path,nil,point(0),now+0.2,options)
+assert(reset==0)
+local _,badEntry=TrackProgress.sample(path,nil,point(30,0,30),now+0.2,options)
+assert(badEntry==0, "new/reset samples cannot attach halfway along path")
+local _,stalled=TrackProgress.sample(path,sample,point(36,4,30),now+10,options)
+assert(stalled==0, "stalls do not create an unbounded projection window")
+print("PASS: curved 3D route, backward travel, shortcut, fall, reset, distant entry, sample gap")
+local loop=assert(TrackProgress.build({point(0),point(20),point(20,0,20),point(0,0,20),point(0),point(-20)},1))
+local first,zero=TrackProgress.sample(loop,nil,point(0),0,options)
+assert(zero==0)
+local _,jump=TrackProgress.sample(loop,first,point(-5),0.1,options)
+assert(jump==0,"coincident loop end must not be reachable from start")
+local elevated=assert(TrackProgress.build({point(0),point(20),point(20,20),point(0,20)},1))
+local _,wrongLevel=TrackProgress.sample(elevated,nil,point(0,20),0,options)
+assert(wrongLevel==0)
+local narrow=assert(TrackProgress.build({point(0),point(20),point(20,0,20)},1))
+local before=select(1,TrackProgress.sample(narrow,nil,point(10),0,options))
+local _,cornerCut=TrackProgress.sample(narrow,before,point(20,0,10),0.3,options)
+assert(cornerCut==0,"endpoint-only projection must not permit cutting the corner")
+assert(TrackProgress.build({point(0),point(0)},1)==nil)
+assert(TrackProgress.build({point(0),point(1)},0)==nil)
+print("PASS: overlapping loop and elevated section isolation, swept corridor, malformed paths")
+local ranked=Placement.getPositions({{userId=2,completedLaps=0,checkpoint=5,distance=999},
+	{userId=1,completedLaps=1,checkpoint=0,distance=0}, {userId=3,completedLaps=0,checkpoint=6,distance=0}}, {9})
+assert(ranked["9"]==1 and ranked["1"]==2 and ranked["3"]==3 and ranked["2"]==4)
+assert(Format.time(84.5831)=="01:24.583")
+assert(Format.time(59.9991)=="00:59.999" and Format.time(60)=="01:00.000")
+assert(Format.time(-1)=="00:00.000")
+for number, suffix in {[1]="st",[2]="nd",[3]="rd",[4]="th",[11]="th",[12]="th",[13]="th",[21]="st",[112]="th"} do
+	assert(Format.ordinal(number)==suffix)
+end
+print("PASS: checkpoint/lap/finish precedence, timer milliseconds and ordinal exceptions")
