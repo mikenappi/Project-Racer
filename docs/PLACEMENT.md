@@ -1,52 +1,114 @@
-# Player placement (issue #22)
+# Race placement (#22 and #34)
 
-`PlacementService.getPositions` ranks racers using private server data. The
-existing RaceManager starts RaceService, which consumes validated
-`CheckpointService.getRaceProgress` and `getLastIndex`, refreshes placement on
-its existing Racing heartbeat, and publishes changes. No additional heartbeat,
-client authority, UI, or changes to checkpoints/recovery are introduced.
+`RaceService` owns the race roster and immutable finish records.
+`CheckpointService` alone validates ordered checkpoints, completed laps, and
+directed finish-plane crossings. `TrackProgress` computes a distance within that
+validated checkpoint interval. `PlacementService` compares those inputs. Clients
+render placement and cannot submit rank or progress.
 
-## Ordering and results contract
+## Ordering and synchronization
 
-1. Accepted finishers retain their recorded places, ahead of active racers.
-2. Active racers sort by completed laps descending, then validated checkpoint
-   index descending. Lap wrap to checkpoint zero cannot lose lap precedence.
-3. Equal active progress sorts by ascending numeric UserId. This is stable
-   regardless of table traversal, resets, or the previous standings. Distance
-   toward the next checkpoint is intentionally deferred.
+1. Accepted finishers keep their recorded order, including finishers who leave.
+2. Active racers compare completed valid laps, then validated checkpoint index.
+3. Racers at the same stage compare continuous 3D arc distance along that stage's path.
+4. Exact ties use ascending numeric UserId, independent of previous ranks.
 
-The current repository exposes the finish contract for #24 through
-`RaceService.markFinished(player, raceId)` and `finishTimes`; no separate #24
-result module exists here. This change extends that same validated, one-time
-acceptance path with an append-only `finishOrder` of numeric UserIds. Its index
-is the finish place; the existing `finishTimes[tostring(userId)]` supplies time.
-Never reconstruct finish order by sorting times. Equal completions first
-observed in one polling tick are accepted in ascending UserId order. Explicit
-server calls retain their acceptance order. This is server observation order,
-not sub-frame precision timing.
+RaceService samples paths on its existing heartbeat at `PlacementInterval` (0.1s).
+Checkpoint/finish/departure changes still refresh immediately. Only changed ranks
+and existing lifecycle/finish events publish `RaceUpdated`; stationary unchanged
+rankings generate no extra event traffic. Player `RacePosition`/`RacePositionId`
+attributes provide durable late-subscription data. `RaceFinishPosition`,
+`RaceFinishTime`, and `RaceFinishId` remain the finish contract. Snapshot dictionaries
+use string UserId keys. No client positions or placement values are accepted.
 
-Duplicate, stale-generation, spectator and unvalidated finishes remain rejected.
-Finished records survive departures through Results, reserving those places.
-Unfinished departures are removed and remaining active positions compact behind
-all retained finishers. Timeout/DNF receives no finish place/time. Late joiners
-remain outside the roster until the next race. Waiting clears all placement and
-finish data; Loading starts a fresh roster and deterministic initial order.
+`TrackProgress` projects only inside a bounded arc window of the currently
+validated stage. It measures full 3D length, including elevation, and retains the
+last trusted point to distinguish nearby/self-crossing path portions. Speed/time,
+arc-to-chord distance and swept-corridor checks reject implausible motion and
+shortcuts. Rejected samples display zero within-stage distance; they retain their
+trusted anchor and update its timestamp so waiting cannot accumulate teleport
+allowance. Returning near that anchor or resetting permits recovery. Backward
+travel reduces distance. None of this writes checkpoint/lap state.
 
-## HUD/results data (UI remains #25/#26)
+Vehicle identity, ResetVersion, checkpoint and completed-lap changes invalidate
+the old sample. A new sample can attach only near the start of the valid interval;
+it cannot attach to a distant branch. New races and departures remove old samples.
+Recovery across a lap boundary still uses CheckpointService's saved destination;
+if it is outside the new interval, continuous distance stays zero until legitimate
+re-entry. Finishers never use projection again.
 
-- `RaceService.getSnapshot()` and `ReplicatedStorage.RaceUpdated` include detached
-  `positions` (string UserId keys to one-based positions), `finishOrder` (ordered
-  numeric UserIds), and existing `finishTimes`. Use the snapshot's `raceId` and
-  `state`. Racing payloads can represent placement changes, not another GO.
-- `Player.RacePosition` and `RacePositionId` attributes provide durable current
-  placement for clients attaching after an update. `RaceFinishPosition` joins
-  existing `RaceFinishId` and `RaceFinishTime`. Match generation IDs against
-  `ReplicatedStorage.RaceState.RaceId`. Attributes are display data, not inputs.
-- Remote snapshots contain the full retained finish order, including departed
-  finishers. Late subscribers can read current players' attributes immediately;
-  there is no new historical-results request endpoint in this issue.
-- Server snapshots refresh on the existing heartbeat, accepted finishes,
-  departures and state publication. Attributes are not an atomic snapshot.
+## Track authoring in Studio
+
+**Development currently lacks these assets and uses checkpoint fallback.** Do not
+claim live continuous placement on this map until all eight intervals are authored
+and the checks in [M1_TESTING.md](M1_TESTING.md) pass. Do not connect the existing
+checkpoint centers with guessed straight lines through curves.
+
+For a track with N checkpoints, create this non-code hierarchy in Workspace:
+
+```text
+RaceProgressPaths (Folder)
+  0 (Folder): finish/start -> checkpoint 1
+    1, 2, 3, ... (ordered BasePart samples)
+  1 (Folder): checkpoint 1 -> checkpoint 2
+    1, 2, 3, ...
+  ...
+  N (Folder): checkpoint N -> finish
+    1, 2, 3, ...
+```
+
+Use at least two samples per interval, numbered contiguously. Place their centers
+at expected chassis height along the intended route, adding enough samples around
+every bend, hill, loop and crossing. Markers must be anchored, noncollidable,
+non-touchable and nonqueryable; make them transparent for play. The first and last
+sample must lie within the corresponding gate's X/Y bounds and Z thickness plus
+`ProgressEndpointTolerance`. Adjacent intervals should share the same gate point.
+The start is the existing directed FinishLine; grid cars behind it remain at zero
+until they enter the start interval. The path never replaces finish validation.
+
+Set an optional numeric `CorridorRadius` attribute on each interval folder, or use
+`ProgressCorridorRadius` (12 studs). This is a **3D tube around the chassis path**,
+not road width inferred from checkpoint volumes. It must cover usable driving
+positions while excluding grass shortcuts and nearby decks. For branching or
+tightly overlapping routes, add checkpoint boundaries and sufficiently dense path
+samples. A wide tube cannot establish which surface a car occupies. Tune/test the
+route rather than loosening tolerances until bad geometry happens to pass.
+
+The loader snapshots all intervals after CheckpointService validates the track.
+Missing/invalid intervals, markers or endpoints disable continuous ranking for
+the entire race, warn once at setup and set `RaceState.PlacementMode` to
+`Checkpoint fallback`. Valid metadata sets it to `Continuous`. Fix assets in Edit
+mode and start another race to reload. The fallback retains laps/checkpoints,
+fixed finish order and the deterministic UserId tie rule.
+
+## Configuration and limits
+
+All tunables live in `src/shared/RaceConfig.luau`:
+
+| Setting | Purpose |
+| --- | --- |
+| PlacementInterval | Projection sampling interval (0.1 seconds). |
+| ProgressFolderName | Studio metadata root name. |
+| ProgressCorridorRadius | Default 3D tube radius in studs. |
+| ProgressEndpointTolerance | Extra depth allowance at path endpoints. |
+| ProgressMaxSpeed | Maximum plausible chassis displacement rate; 1200 includes current 1000 studs/s test tuning. |
+| ProgressMaxSampleGap | Reject stale samples after pauses over 0.5 seconds. |
+| ProgressEntryDistance | Start/gate/recovery attachment allowance (24 studs). |
+| ProgressSlack | Small movement/arc tolerance (2 studs). |
+| ProgressArcRatio | Maximum local arc distance relative to physical movement (1.5). |
+
+At high speeds around tight bends, a sparse sample or a server stall can conservatively
+reject legitimate motion. Test actual handling and sampling frequency on each track.
+The corridor and continuity rules complement the existing server-owned vehicle
+physics; they are not proof against arbitrary server teleports or all possible
+malformed track layouts. Keep nonadjacent route sections separated relative to
+corridor width and sampling reach, or split them with validated gates.
+
+## Verification
+
+See [M1_TESTING.md](M1_TESTING.md) for current automated and Studio evidence,
+known setup gaps and the manual multiplayer checklist. The following historical
+record predates continuous placement and used checkpoint-only ties.
 
 ## Verification, 2026-10-09
 

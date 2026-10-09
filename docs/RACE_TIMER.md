@@ -32,7 +32,28 @@ No new race driver, finish trigger, full HUD, or movement/recovery policy was ad
   RaceFinishTime and RaceFinishId expose the local player's durable finish.
   Waiting/Loading clear timing and finish attributes before the next race.
 
-## Client use for #25
+## HUD integration (#25)
+
+`src/client/RaceHUD.local.luau` renders original Roblox text UI: TIME and LAP in
+the upper right, a large position number/smaller suffix in the lower left, and the
+existing Start/countdown controls. There are no copied assets, speedometer, items,
+minimap or decorative gameplay systems. `RaceHUDFormat` formats milliseconds and
+ordinal suffixes; `RaceConfig.HUD` controls margins, scaling and reset feedback.
+
+The client subscribes to coherent `RaceUpdated` timing snapshots and locally
+renders with `Workspace:GetServerTimeNow()`. Durable race/player attributes are
+the late-subscriber fallback, with state/generation checks. Lap text reads
+CheckpointService's `CurrentLap`/`TotalLaps`; distance projection never changes it.
+Placement reads `RacePosition` only for the current `RacePositionId`.
+
+The ScreenGui respects CoreUISafeInsets, uses anchored corners and viewport-based
+UIScale, persists across character respawns, guards duplicate controllers and
+disconnects listeners on destruction. Waiting hides race panels, countdown keeps
+time at zero, finished racers retain their time, Results stops DNF timing, and a
+new race clears old values. Reset feedback is temporary. Expanded Roblox UI and
+multiple aspect ratios still need the manual review in [M1_TESTING.md](M1_TESTING.md).
+
+## Timing helper contract
 
 Require `ReplicatedStorage.shared.RaceTiming`. For a coherent RaceUpdated
 snapshot, call `RaceTiming.getElapsed(snapshot, workspace:GetServerTimeNow(),
@@ -41,8 +62,7 @@ finished player returns the fixed finish value while other racers keep timing.
 For late subscribers, `RaceTiming.getReplicatedElapsed(RaceState, player)` reads
 durable attributes with generation matching and uses the same server clock.
 Attributes are not atomic; RaceUpdated is the coherent event contract. No
-per-frame networking or local wall-clock origin is required. This issue provides
-data/helpers only; adding a timer label and the full HUD remains with #25.
+per-frame networking or local wall-clock origin is required. The HUD uses these existing helpers; it creates no second timer or race lifecycle.
 
 ## Source evidence — 2026-10-09
 

@@ -10,9 +10,20 @@ One shared vehicle type, one complete greybox track, and at least two simultaneo
 
 Studio owns track geometry, models, checkpoint parts, grid markers, and other non-code assets. Git owns Luau source in the existing `src/client`, `src/server`, and `src/shared` Script Sync roots. Preserve those mappings. The server decides checkpoint progress, laps, starts, resets, finishes, and placement; clients handle input, camera, and presentation. Shared configuration holds tuning. See [ARCHITECTURE.md](ARCHITECTURE.md).
 
-Cosmetics, currency, progression, abilities, additional tracks/vehicle types, finished art/UI, soundtrack, and precise distance-based placement are outside this milestone. Basic timer, HUD, results, and repeat-race integration already have feature issues below; they do not require polished presentation.
+Cosmetics, currency, progression, abilities, additional tracks/vehicle types, finished art/UI, soundtrack, are outside this milestone. The finalization request adds a minimal styled HUD and continuous placement under #34; track metadata and runtime validation are required. Basic timer, HUD, results, and repeat-race integration already have feature issues below; they do not require polished presentation.
 
-## Evidence and status
+## Current finalization status — 2026-10-09
+
+Race lifecycle, grid, countdown, laps, timing, finish detection, HUD and continuous
+placement infrastructure are now implemented. The current map lacks progress paths
+and retains checkpoint fallback; the full results screen and multiplayer acceptance
+remain outstanding. [ROADMAP.md](ROADMAP.md) is the current feature status and
+[M1_TESTING.md](M1_TESTING.md) records executed tests and remaining acceptance.
+The detailed implementation observations below are the preserved **2026-10-08
+baseline**, not current TODO status. The requirements and unchecked whole-loop
+acceptance remain applicable.
+
+## Historical baseline evidence and status
 
 Snapshot: 2026-10-08, source revision `df9c430f7f13454f8f31e6ea490c046338c29f7f`. Issue numbers, titles, and dependencies were checked against GitHub. Issues #7, #8, #9, #10, #16, and #23 were confirmed closed; #15 was open. An issue's closed state is separate from runtime verification.
 
