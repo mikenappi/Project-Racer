@@ -18,7 +18,6 @@ sources = {
     'SERVICE': read('src/server/PlayerVehicleService.luau'),
     'CHECKPOINT': read('src/server/CheckpointService.luau'),
     'RESPAWN': read('src/server/RespawnService.luau'),
-    'MANAGER': read('src/server/RaceManager.server.luau'),
     'VEHICLE': read('src/server/VehicleService.luau'),
     'CONTROLLER_RESET': 'return function(state)' + reset_prelude + '\nend',
     'CLIENT_RESET': 'local ReplicatedStorage = game:GetService("ReplicatedStorage")\n' + read('src/client/InputController.local.luau').split('-- Keep reset input independent', 1)[1].split('\n', 1)[1],

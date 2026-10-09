@@ -243,7 +243,9 @@ function VehicleService.resetOnGround(vehicle: Model, markerCFrame: CFrame, owne
 	local destination = groundDestination(vehicle, markerCFrame, owner, true)
 	if not destination then return false end
 	local chassis = vehicle.PrimaryPart
-	if not chassis or not chassis:CanSetNetworkOwnership() then return false end
+	-- Loading/Countdown deliberately anchor the chassis. Moving it must preserve
+	-- that lock; ownership is restored by the controller when Racing starts.
+	if not chassis or (not chassis.Anchored and not chassis:CanSetNetworkOwnership()) then return false end
 	local seat = vehicle:FindFirstChild("DriverSeat")
 	local rider = if seat and seat:IsA("VehicleSeat") and seat.Occupant
 		and character and seat.Occupant.Parent == character then character else nil
@@ -258,7 +260,7 @@ function VehicleService.resetOnGround(vehicle: Model, markerCFrame: CFrame, owne
 		end
 	end
 	seatOwner(vehicle, owner)
-	chassis:SetNetworkOwner(nil)
+	if not chassis.Anchored then chassis:SetNetworkOwner(nil) end
 	vehicle:SetAttribute("ResetVersion", (vehicle:GetAttribute("ResetVersion") or 0) + 1)
 	return true
 end
