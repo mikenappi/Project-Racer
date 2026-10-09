@@ -57,6 +57,7 @@ local function getSpawnCFrame(slot: number): CFrame?
 	-- relative to the marker's heading, and never move when another player leaves.
 	local origin = Workspace:FindFirstChild(Config.TestSpawnName)
 	if not origin or not origin:IsA("BasePart") then return nil end
+	if slot > Config.SpawnColumns * Config.SpawnRows then return nil end
 	local index = slot - 1
 	return origin.CFrame * CFrame.new(
 		(index % Config.SpawnColumns) * Config.SpawnSpacing.X,
@@ -81,9 +82,9 @@ local function trySpawn(state: PlayerState)
 		local checkpoint = if recoveryDestination then recoveryDestination(state.player) else nil
 		local marker = checkpoint or getSpawnCFrame(state.slot)
 		if not marker then return nil end
-		-- CharacterAdded can precede the root part. Wait before placing a recovered racer.
-		if checkpoint and (not state.character or not state.character:FindFirstChild("HumanoidRootPart")) then return nil end
-		return VehicleService.spawnOnGround(marker, true, state.player, checkpoint ~= nil)
+		-- CharacterAdded can precede the root part. Every spawn now seats its owner.
+		if (not state.character or not state.character:FindFirstChild("HumanoidRootPart")) then return nil end
+		return VehicleService.spawnOnGround(marker, true, state.player, true)
 	end)
 	if success and result then
 		local vehicle = result :: Model
@@ -156,6 +157,12 @@ function PlayerVehicleService.getVehicle(player: Player): Model?
 	return if vehicle and folder and vehicle.Parent == folder then vehicle else nil
 end
 
+-- Reuse the lifecycle's private assignment; replicated slot attributes are display only.
+function PlayerVehicleService.getGridCFrame(player: Player): CFrame?
+	local state = states[player]
+	return if state then getSpawnCFrame(state.slot) else nil
+end
+
 -- Keep the lifecycle's model and slot; a blocked reset never destroys the car.
 function PlayerVehicleService.resetVehicle(player: Player, checkpointCFrame: CFrame?): boolean
 	local state = states[player]
@@ -176,13 +183,16 @@ end
 -- Idempotent entry point; it also handles players already present at startup.
 function PlayerVehicleService.start()
 	if started or not Config.PlayerVehiclesEnabled then return end
+	assert(Config.SpawnRows >= 1 and Config.SpawnRows % 1 == 0, "SpawnRows must be a positive integer.")
 	assert(Config.SpawnColumns >= 1 and Config.SpawnColumns % 1 == 0, "SpawnColumns must be a positive integer.")
 	assert(Config.SpawnSpacing.X > 0 and Config.SpawnSpacing.Z > 0, "SpawnSpacing must be positive.")
 	assert(Config.SpawnRetryInterval > 0 and Config.VehicleRecoveryHeight >= 0, "Invalid recovery settings.")
 	started = true
 	Players.PlayerAdded:Connect(addPlayer)
 	Players.PlayerRemoving:Connect(removePlayer)
-	for _, player in Players:GetPlayers() do addPlayer(player) end
+	local players = Players:GetPlayers()
+	table.sort(players, function(a, b) return a.UserId < b.UserId end)
+	for _, player in players do addPlayer(player) end
 
 	RunService.Heartbeat:Connect(function()
 		local folder = Workspace:FindFirstChild(Config.ActiveFolderName)

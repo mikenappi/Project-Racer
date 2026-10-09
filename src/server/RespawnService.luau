@@ -8,8 +8,22 @@ local PlayerVehicleService = require(script.Parent:WaitForChild("PlayerVehicleSe
 local RespawnService = {}
 local nextRequest: {[Player]: number} = {}
 local started = false
+local resetPredicate: ((Player) -> boolean)? = nil
+
+function RespawnService.setResetPredicate(predicate: (Player) -> boolean)
+	resetPredicate = predicate
+end
+
+function RespawnService.clearRacer(player: Player)
+	nextRequest[player] = nil
+	player:SetAttribute("ResetStatus", nil)
+end
 
 function RespawnService.requestReset(player: Player): boolean
+	if resetPredicate and not resetPredicate(player) then
+		player:SetAttribute("ResetStatus", "Reset available while racing")
+		return false
+	end
 	if not CheckpointService.isRacer(player) then
 		player:SetAttribute("ResetStatus", "Race unavailable: check checkpoint setup")
 		return false
