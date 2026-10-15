@@ -2,8 +2,8 @@
 
 Each connected player is treated as a racer for now. After their living character
 appears, the server gives them one vehicle cloned from the existing placeholder.
-Enter its DriverSeat to drive. Automatic seating and race/lobby selection are not
-part of this issue.
+The owner is now automatically seated at their assigned grid position.
+Race preparation and repeat-race placement are described in [STARTING_GRID.md](STARTING_GRID.md).
 
 ## Where each part lives
 
@@ -26,7 +26,8 @@ No setup command needs to be pasted again for the existing Development place.
 With no `Workspace.VehicleSpawns` folder, the service uses the existing
 `Workspace.PlaceholderVehicleSpawn` as the first slot and grid origin.
 
-- Three columns by default, spaced 16 studs right and 20 studs backward.
+- Three columns and one row by default, spaced 16 studs right; additional configured rows are 20 studs backward.
+- Fallback capacity is SpawnColumns * SpawnRows; authored markers define their own capacity.
 - Positions and forward direction rotate with the origin marker.
 - A player keeps their slot through death and respawn.
 - Leaving frees that slot for the next player; remaining players keep theirs.
@@ -68,7 +69,7 @@ The recovery threshold is `Workspace.FallenPartsDestroyHeight +
 VehicleRecoveryHeight` (50 studs above the engine's destruction height by default).
 This also recovers an empty car that falls off the map. If a seated driver falls
 with it, normal Roblox character death/respawn still applies; the service does
-not teleport or automatically reseat the driver. Adjust the threshold for maps
+automatically seat the driver in the replacement car when their living character is ready. Adjust the threshold for maps
 with legitimate driving areas near the destruction height.
 
 ## Stationary checks and driving feel
@@ -127,5 +128,5 @@ asset errors, lost cars/chassis/seats, leave cleanup, and slot reuse.
 Checkpoint progression and R-key resets are described in [CHECKPOINTS.md](CHECKPOINTS.md).
 Manual resets retain the active vehicle and spawn slot. With an earned checkpoint,
 death/fall recovery creates the replacement at the saved checkpoint and seats the
-owner. Before checkpoint 1 it retains the original spawn-slot behavior. Progress
+owner. Before checkpoint 1 it uses the assigned grid slot and seats the owner. Progress
 survives replacement until the next race; blocked checkpoints retry in place.

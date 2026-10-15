@@ -14,6 +14,7 @@ local VehicleConfig = {
 	-- Issue 9: everyone is a racer until race/lobby participation is implemented.
 	PlayerVehiclesEnabled = true,
 	SpawnFolderName = "VehicleSpawns", -- Optional numbered markers: 1, 2, 3...
+	SpawnRows = 1, -- Three verified road slots; authored VehicleSpawns defines its own capacity.
 	SpawnColumns = 3, -- Fallback grid relative to PlaceholderVehicleSpawn.
 	SpawnSpacing = Vector3.new(16, 0, 20),
 	SpawnRetryInterval = 1, -- Retry blocked/missing spawns without making duplicates.

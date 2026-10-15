@@ -69,11 +69,11 @@ local blocked, assetError = false, false
 local Config = {
 	PlayerVehiclesEnabled = true, SpawnFolderName = "VehicleSpawns",
 	TestSpawnName = "PlaceholderVehicleSpawn", ActiveFolderName = "Vehicles",
-	SpawnColumns = 3, SpawnSpacing = {X = 16, Z = 20},
+	SpawnRows = 1, SpawnColumns = 3, SpawnSpacing = {X = 16, Z = 20},
 	SpawnRetryInterval = 1, VehicleRecoveryHeight = 50,
 }
 local vehicleService = {}
-function vehicleService.spawnOnGround(spawnFrame, enabled, owner)
+function vehicleService.spawnOnGround(spawnFrame, enabled, owner, seatOwner)
 	attempts += 1
 	if assetError then error("Missing template") end
 	if blocked then return nil end
@@ -84,11 +84,15 @@ function vehicleService.spawnOnGround(spawnFrame, enabled, owner)
 	vehicle:SetAttribute("OwnerUserId", owner.UserId)
 	local chassis = instance("Part", "Chassis")
 	chassis.Parent = vehicle
-	chassis.Position = {Y = 5}
+	chassis.Position = {X = spawnFrame.x, Y = 5, Z = spawnFrame.z}
 	vehicle.PrimaryPart = chassis
 	local seat = instance("VehicleSeat", "DriverSeat")
 	seat.Parent = vehicle
 	vehicle.children.DriverSeat = seat
+	if seatOwner then
+		seat.Occupant = owner.Character.children.Humanoid
+		seat.Occupant.SeatPart = seat
+	end
 	table.insert(cars, vehicle)
 	return vehicle
 end
@@ -112,9 +116,10 @@ local chunk = assert(loadstring(__SERVICE_SOURCE__, "PlayerVehicleService"))
 setfenv(chunk, environment)
 local service = chunk()
 
-local function characterFor(player, withHumanoid)
+local function characterFor(player, withHumanoid, withRoot)
 	local character = instance("Model", "Character")
 	character.Parent = Workspace
+	if withRoot ~= false then character.children.HumanoidRootPart = instance("Part", "HumanoidRootPart") end
 	if withHumanoid ~= false then
 		local humanoid = instance("Humanoid", "Humanoid")
 		humanoid.Health = 100
@@ -152,6 +157,7 @@ Players.PlayerAdded:Fire(first)
 local firstCar = assert(service.getVehicle(first))
 assert(liveCount() == 1 and firstCar:GetAttribute("OwnerUserId") == 101)
 assert(firstCar:GetAttribute("SpawnSlot") == 1)
+assert(firstCar.children.DriverSeat.Occupant == first.Character.children.Humanoid, "initial spawn must seat owner")
 near(firstCar.frame.x, 10); near(firstCar.frame.z, 20)
 
 -- A joining player without a character gets one car only when ready.
@@ -254,6 +260,16 @@ Players.PlayerRemoving:Fire(second)
 Players.PlayerRemoving:Fire(third)
 tick(2)
 assert(liveCount() == 0)
+
+-- Initial seating also waits for the character root, not only checkpoint recovery.
+local fourth = player(404)
+Players.PlayerAdded:Fire(fourth)
+characterFor(fourth, true, false)
+assert(service.getVehicle(fourth) == nil, "initial spawn must wait for root")
+fourth.Character.children.HumanoidRootPart = instance("Part", "HumanoidRootPart")
+tick(1)
+assert(service.getVehicle(fourth).children.DriverSeat.Occupant == fourth.Character.children.Humanoid)
+Players.PlayerRemoving:Fire(fourth)
 
 -- Run the actual controller ownership check, including the unowned test fixture.
 function Players:GetPlayerFromCharacter(character)

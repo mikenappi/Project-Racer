@@ -6,6 +6,7 @@ local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local Config = require(ReplicatedStorage:WaitForChild("shared"):WaitForChild("VehicleConfig"))
 local VehicleService = require(script.Parent:WaitForChild("VehicleService"))
+local RaceService = require(script.Parent:WaitForChild("RaceService"))
 
 local EPSILON = 0.001
 for _, key in {"MaxForwardSpeed", "MaxReverseSpeed", "Acceleration", "Braking",
@@ -50,6 +51,7 @@ type DriveState = {
 	driveForce: number,
 	driveMode: DriveMode,
 	resetVersion: number,
+	raceLocked: boolean,
 	occupantConnection: RBXScriptConnection?,
 }
 local states: {[VehicleSeat]: DriveState} = {}
@@ -76,6 +78,7 @@ inputRemote.OnServerEvent:Connect(function(player: Player, seat: any, throttle: 
 	if typeof(seat) ~= "Instance" or not seat:IsA("VehicleSeat") then return end
 	local state = states[seat]
 	if not state or getDriver(seat) ~= player then return end
+	if state.vehicle:GetAttribute("OwnerUserId") ~= nil and not RaceService.canDrive(player) then return end
 	if not finiteNumber(throttle) or not finiteNumber(steer) then return end
 	local now = os.clock()
 	if now - state.lastInput < Config.InputMinReceiveInterval then return end
@@ -142,10 +145,34 @@ local function stepVehicle(state: DriveState, dt: number)
 		state.driveForce, state.driveMode = 0, "Hold"
 	end
 	local chassis = state.chassis
+	local ownerId = state.vehicle:GetAttribute("OwnerUserId")
+	local owner = if typeof(ownerId) == "number" then Players:GetPlayerByUserId(ownerId) else nil
+	local coasting = owner ~= nil and RaceService.canCoast(owner)
+	local locked = ownerId ~= nil and not coasting and (not owner or not RaceService.canDrive(owner))
+	if locked then
+		state.raceLocked = true
+		chassis.Anchored = true
+		chassis.AssemblyLinearVelocity, chassis.AssemblyAngularVelocity = Vector3.zero, Vector3.zero
+		state.velocity.Enabled, state.angular.Enabled = false, false
+		state.throttle, state.steer, state.lastInput, state.yawRate = 0, 0, -math.huge, 0
+		state.driveForce, state.driveMode = 0, "Hold"
+		state.vehicle:SetAttribute("MovementInputActive", false)
+		state.vehicle:SetAttribute("ForwardSpeed", 0)
+		return
+	elseif state.raceLocked then
+		state.raceLocked = false
+		chassis.Anchored = false
+		local canSet = chassis:CanSetNetworkOwnership()
+		if canSet then chassis:SetNetworkOwner(nil) end
+	end
+	if coasting then
+		-- Ignore held/queued input without anchoring or overwriting momentum.
+		state.throttle, state.steer, state.lastInput = 0, 0, -math.huge
+	end
 	local normal = getGroundNormal(state)
 	local look = chassis.CFrame.LookVector
 	local horizontal = Vector3.new(look.X, 0, look.Z)
-	local hasInput = getDriver(state.seat) ~= nil and os.clock() - state.lastInput <= Config.InputTimeout
+	local hasInput = not coasting and getDriver(state.seat) ~= nil and os.clock() - state.lastInput <= Config.InputTimeout
 	state.vehicle:SetAttribute("MovementInputActive", hasInput)
 	state.vehicle:SetAttribute("ForwardSpeed",
 		if horizontal.Magnitude > EPSILON then chassis.AssemblyLinearVelocity:Dot(horizontal.Unit) else 0)
@@ -165,9 +192,9 @@ local function stepVehicle(state: DriveState, dt: number)
 	local speed = chassis.AssemblyLinearVelocity:Dot(forward)
 	local throttle = if hasInput then state.throttle else 0
 	local steer = if hasInput then state.steer else 0
-	local target, acceleration, mode: DriveMode = getDriveTarget(speed, throttle, hasInput)
+	local target, acceleration, mode: DriveMode = getDriveTarget(speed, throttle, hasInput or coasting)
 	-- If a slope or impact exceeds a speed cap, recover with braking force.
-	if speed > Config.MaxForwardSpeed or speed < -Config.MaxReverseSpeed then
+	if not coasting and (speed > Config.MaxForwardSpeed or speed < -Config.MaxReverseSpeed) then
 		acceleration = Config.Braking
 		mode = "Hold"
 	end
@@ -250,6 +277,7 @@ local function startVehicle(vehicle: Model)
 		throttle = 0, steer = 0, lastInput = -math.huge, yawRate = 0,
 		driveForce = 0, driveMode = "Hold",
 		resetVersion = vehicle:GetAttribute("ResetVersion") or 0,
+		raceLocked = false,
 		occupantConnection = nil,
 	}
 	states[seat] = state
